@@ -2,8 +2,6 @@
 
 namespace App\Actions\Catalog;
 
-use App\Models\Client;
-use App\Models\ClientContact;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class ReplaceContacts
@@ -11,7 +9,10 @@ class ReplaceContacts
     /**
      * Deletes the current contacts through the models (so they are audited) and creates the given ones.
      *
-     * @param  HasMany<ClientContact, Client>  $relation
+     * @template TRelated of \Illuminate\Database\Eloquent\Model
+     * @template TParent of \Illuminate\Database\Eloquent\Model
+     *
+     * @param  HasMany<TRelated, TParent>  $relation
      * @param  array<int, array<string, mixed>>  $contacts
      */
     public function handle(HasMany $relation, array $contacts): void

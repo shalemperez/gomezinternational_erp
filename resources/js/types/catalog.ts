@@ -111,3 +111,27 @@ export type Client = {
     currency?: { id: number; code: string } | null;
     contacts?: ClientContact[];
 };
+export type SupplierContact = ClientContact;
+export type Supplier = {
+    id: number;
+    code: string;
+    name: string;
+    country_code: string;
+    country_label?: string;
+    is_local: boolean;
+    tax_id: string | null;
+    foreign_tax_id: string | null;
+    currency_id: number;
+    credit_days: number;
+    address: string | null;
+    phone: string | null;
+    email: string | null;
+    notes: string | null;
+    tax_id_validation_overridden: boolean;
+    tax_id_override_reason: string | null;
+    tax_id_override_at: string | null;
+    tax_id_override_by_name?: string | null;
+    is_active: boolean;
+    currency?: { id: number; code: string } | null;
+    contacts?: SupplierContact[];
+};

@@ -96,3 +96,14 @@ function fakeRnc(): string
 
     return $first.FiscalId::rncCheckDigit($first);
 }
+
+function validSupplierPayload(array $over = []): array
+{
+    $currency = Currency::query()->where('code', 'USD')->firstOr(fn () => Currency::factory()->create(['code' => 'USD']));
+
+    return array_merge([
+        'code' => '', 'name' => 'Importadora Global LLC', 'country_code' => 'US', 'tax_id' => '', 'foreign_tax_id' => 'US-12-3456789', 'currency_id' => $currency->id,
+        'credit_days' => 60, 'address' => '1 Main St', 'phone' => '', 'email' => 'sales@global.test', 'notes' => '', 'contacts' => [],
+        'tax_id_override' => '', 'tax_id_override_reason' => '', 'is_active' => 'on',
+    ], $over);
+}

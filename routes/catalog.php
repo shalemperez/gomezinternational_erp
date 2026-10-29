@@ -7,6 +7,7 @@ use App\Http\Controllers\Catalog\PriceListController;
 use App\Http\Controllers\Catalog\ProductCategoryController;
 use App\Http\Controllers\Catalog\ProductController;
 use App\Http\Controllers\Catalog\SalespersonController;
+use App\Http\Controllers\Catalog\SupplierController;
 use App\Http\Controllers\Catalog\UnitOfMeasureController;
 use Illuminate\Support\Facades\Route;
 
@@ -37,4 +38,7 @@ Route::middleware(['auth'])->prefix('catalog')->name('catalog.')->group(function
 
     Route::get('salespeople/export', [SalespersonController::class, 'export'])->name('salespeople.export');
     Route::resource('salespeople', SalespersonController::class)->except(['show'])->parameters(['salespeople' => 'salesperson']);
+
+    Route::get('suppliers/export', [SupplierController::class, 'export'])->name('suppliers.export');
+    Route::resource('suppliers', SupplierController::class)->except(['show']);
 });
