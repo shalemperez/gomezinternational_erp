@@ -8,3 +8,4 @@ pest()->extend(TestCase::class)
     ->in('Feature');
 
 require __DIR__.'/Support/helpers.php';
+require __DIR__.'/Support/crud.php';

@@ -23,7 +23,7 @@ trait LogsModelActivity
     protected function auditDescription(string $event): string
     {
         if ($event === 'updated' && $this->wasChanged('is_active')) {
-            return $this->is_active ? 'Registro activado' : 'Registro desactivado';
+            return $this->getAttribute('is_active') ? 'Registro activado' : 'Registro desactivado';
         }
 
         return match ($event) {

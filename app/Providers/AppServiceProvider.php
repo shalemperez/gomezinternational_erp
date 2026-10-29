@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Listeners\LogAccessChanges;
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Services\Settings;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
@@ -25,7 +26,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->singleton(Settings::class);
     }
 
     /**
