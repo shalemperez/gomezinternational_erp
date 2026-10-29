@@ -15,6 +15,6 @@ class UploadImportRequest extends FormRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
-        return ['file' => ['required', 'file', 'mimes:xlsx,xls,csv', 'max:10240']] + ImporterRegistry::get((string) $this->route('type'))->metaRules();
+        return ['file' => ['required', 'file', 'mimes:xlsx,csv', 'max:10240']] + ImporterRegistry::get((string) $this->route('type'))->metaRules();
     }
 }

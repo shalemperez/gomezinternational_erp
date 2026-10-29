@@ -12,11 +12,15 @@ use App\Rules\DominicanTaxId;
 use App\Support\FiscalId;
 use App\Support\Money\Decimal;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 
 class ClientsImporter extends BaseImporter
 {
+    /** @var array<string, true> codes already seen in this file */
+    private array $seenCodes = [];
+
     public static function type(): string
     {
         return 'clients';
@@ -71,8 +75,6 @@ class ClientsImporter extends BaseImporter
         $row['tax_id'] = $row['tax_id_type'] === 'none' || empty($row['tax_id']) ? null : FiscalId::normalize((string) $row['tax_id']);
         $row['currency_code'] = isset($row['currency_code']) ? strtoupper($row['currency_code']) : null;
         $row['email'] = isset($row['email']) ? strtolower($row['email']) : null;
-        $row['credit_days'] = $row['credit_days'] ?? '0';
-        $row['credit_limit'] = $row['credit_limit'] ?? '0';
 
         return $row;
     }
@@ -88,9 +90,23 @@ class ClientsImporter extends BaseImporter
         if (in_array($row['tax_id_type'] ?? null, ['rnc', 'cedula'], true)) {
             $taxIdRules = ['required', 'string', new DominicanTaxId($row['tax_id_type'])];
         }
+        $existing = $this->findExisting($row, $meta);
+        $code = $row['code'] ?? null;
+        $codeRules = ['nullable', 'string', 'max:20', 'alpha_dash', Rule::unique('clients', 'code')->ignore($existing?->getKey())];
+        if (is_string($code) && $code !== '') {
+            $codeRules[] = function (string $attribute, mixed $value, \Closure $fail) use ($code): void {
+                if (isset($this->seenCodes[$code])) {
+                    $fail('Código duplicado en el archivo.');
+                }
+                $this->seenCodes[$code] = true;
+            };
+        }
+        if ($existing instanceof Client && filled($existing->tax_id) && filled($row['tax_id'] ?? null) && $existing->tax_id !== $row['tax_id']) {
+            $taxIdRules[] = fn (string $attribute, mixed $value, \Closure $fail) => $fail('El RNC/cédula no coincide con el cliente existente de este código.');
+        }
 
         return [
-            'code' => ['nullable', 'string', 'max:20', 'alpha_dash'],
+            'code' => $codeRules,
             'business_name' => ['required', 'string', 'max:200'],
             'trade_name' => ['nullable', 'string', 'max:200'],
             'tax_id_type' => ['required', Rule::enum(TaxIdType::class)],
@@ -101,11 +117,17 @@ class ClientsImporter extends BaseImporter
             'phone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
             'salesperson_code' => ['nullable', 'string', 'exists:salespeople,code'],
-            'credit_days' => ['required', 'integer', 'between:0,365'],
-            'credit_limit' => ['required', 'numeric', 'min:0'],
+            'credit_days' => ['nullable', 'integer', 'between:0,365'],
+            'credit_limit' => ['nullable', 'numeric', 'min:0', 'max:999999999999.99'],
             'price_list_name' => ['nullable', 'string', 'exists:price_lists,name'],
             'currency_code' => ['required', 'string', 'exists:currencies,code'],
         ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return ['code.unique' => 'El código ya pertenece a otro cliente.'];
     }
 
     /**
@@ -141,32 +163,37 @@ class ClientsImporter extends BaseImporter
     {
         /** @var Client $client */
         $client = $existing ?? new Client;
-        $client->fill([
-            'business_name' => $row['business_name'],
-            'trade_name' => $row['trade_name'],
-            'tax_id_type' => $row['tax_id_type'],
-            'tax_id' => $row['tax_id'],
-            'taxpayer_type' => $row['taxpayer_type'],
-            'address' => $row['address'],
-            'city' => $row['city'],
-            'phone' => $row['phone'],
-            'email' => $row['email'],
-            'salesperson_id' => $row['salesperson_code'] ? Salesperson::query()->where('code', $row['salesperson_code'])->value('id') : $client->salesperson_id,
-            'credit_days' => (int) $row['credit_days'],
-            'credit_limit' => Decimal::money((string) $row['credit_limit']),
-            'price_list_id' => $row['price_list_name'] ? PriceList::query()->where('name', $row['price_list_name'])->value('id') : $client->price_list_id,
+        $attributes = [
+            'business_name' => $row['business_name'] ?? null,
+            'trade_name' => $row['trade_name'] ?? null,
+            'taxpayer_type' => $row['taxpayer_type'] ?? null,
+            'address' => $row['address'] ?? null,
+            'city' => $row['city'] ?? null,
+            'phone' => $row['phone'] ?? null,
+            'email' => $row['email'] ?? null,
+            'salesperson_id' => filled($row['salesperson_code'] ?? null) ? Salesperson::query()->where('code', $row['salesperson_code'])->value('id') : null,
+            'credit_days' => filled($row['credit_days'] ?? null) ? (int) $row['credit_days'] : null,
+            'credit_limit' => filled($row['credit_limit'] ?? null) ? Decimal::money((string) $row['credit_limit']) : null,
+            'price_list_id' => filled($row['price_list_name'] ?? null) ? PriceList::query()->where('name', $row['price_list_name'])->value('id') : null,
             'currency_id' => Currency::query()->where('code', $row['currency_code'])->value('id'),
-        ]);
-        if (! empty($row['code'])) {
-            $client->code = $row['code'];
-        } elseif (blank($client->code)) {
-            $client->code = 'TMP';
+        ];
+        if ($existing === null || blank($client->tax_id)) {
+            $attributes['tax_id_type'] = $row['tax_id_type'] ?? null;
+            $attributes['tax_id'] = $row['tax_id'] ?? null;
+        }
+        // On update, blank cells and absent columns never overwrite existing data.
+        $client->fill($existing === null ? $attributes : array_filter($attributes, fn (mixed $v): bool => $v !== null));
+        if ($existing === null) {
+            $client->credit_days ??= 0;
+            $client->setAttribute('credit_limit', $client->getAttribute('credit_limit') ?? '0.00');
+        }
+        if (filled($row['code'] ?? null)) {
+            $client->code = (string) $row['code'];
+        } elseif (! $client->exists && blank($client->code)) {
+            $client->setAttribute('id', (int) DB::scalar("select nextval(pg_get_serial_sequence('clients', 'id'))"));
+            $client->code = 'CLI-'.str_pad((string) $client->getKey(), 5, '0', STR_PAD_LEFT);
         }
         $client->save();
-        if ($client->code === 'TMP') {
-            $client->code = 'CLI-'.str_pad((string) $client->id, 5, '0', STR_PAD_LEFT);
-            $client->save();
-        }
 
         return $client;
     }
