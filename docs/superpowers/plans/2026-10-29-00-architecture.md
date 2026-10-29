@@ -194,7 +194,7 @@ A user may hold several roles; effective permissions are the union.
 
 **admin (1):** `admin.users.view`, `admin.users.create`, `admin.users.update`, `admin.users.deactivate`, `admin.users.impersonate`, `admin.roles.view`, `admin.roles.update`, `admin.settings.view`, `admin.settings.manage`, `admin.activity-log.view`, `admin.system.manage` (integrations, certificates, queues, error logs, fiscal mode switch; super-admin only — never granted to another role by default).
 
-**catalog (1):** for each resource `clients`, `suppliers`, `brands`, `categories`, `units`, `products`, `price-lists`, `salespeople`, `additional-taxes`: `catalog.<resource>.view`, `.create`, `.update`, `.delete`, `.export`; `.import` for `clients`, `suppliers`, `products`, `price-lists`; extra: `catalog.clients.view-all`, `catalog.products.view-costs`.
+**catalog (1):** for each resource `clients`, `suppliers`, `brands`, `categories`, `units`, `products`, `price-lists`, `salespeople`, `additional-taxes`: `catalog.<resource>.view`, `.create`, `.update`, `.delete`, `.export`; `.import` for `clients`, `suppliers`, `products`, `price-lists`; extra: `catalog.clients.view-all`, `catalog.products.view-costs`, `catalog.tax-ids.override-validation` (save a client/supplier whose RNC/cédula fails the checksum, with a mandatory reason; owner only by default).
 
 **finance (1):** `finance.currencies.manage`, `finance.exchange-rates.view`, `finance.exchange-rates.manage`, `finance.accounts.view`, `finance.accounts.manage` (bank accounts & cash boxes).
 
@@ -217,7 +217,7 @@ A user may hold several roles; effective permissions are the union.
 ### 5.4 Default role grants
 
 The catalog stores, per permission, the list of roles that receive it by default. Rules used to derive the Phase 1 defaults (later phases follow the same logic):
-- `owner`: all permissions except `admin.system.manage`, `admin.users.impersonate`.
+- `owner`: all permissions except `admin.system.manage`, `admin.users.impersonate` (includes `catalog.tax-ids.override-validation`, which no other role gets by default).
 - `management`: all except `admin.*`.
 - `accounting`: all `catalog.*` (incl. `view-costs`, `view-all`), all `finance.*`, `inventory.warehouses.view`, `inventory.stock.view`, `inventory.stock.view-costs`, `admin.activity-log.view`, `admin.settings.view`.
 - `sales`: `catalog.clients.view/create/update` (own clients only — no `view-all`), `catalog.products.view`, `catalog.brands.view`, `catalog.categories.view`, `catalog.price-lists.view`, `catalog.salespeople.view`, `finance.exchange-rates.view`, `inventory.stock.view`.
@@ -233,14 +233,34 @@ The catalog stores, per permission, the list of roles that receive it by default
 
 ---
 
-## 6. Audit and immutability
+## 6. Audit — everything leaves a trace (cross-phase Global Constraint)
 
-- `spatie/laravel-activitylog` v5. Every model that represents master data or a document uses `App\Models\Concerns\LogsModelActivity` (wraps `Spatie\Activitylog\Models\Concerns\LogsActivity` with `LogOptions::defaults()->logOnly(['*'])->logOnlyDirty()->dontLogEmptyChanges()->useLogName(<table name>)`), so `created`, `updated`, `deleted` are recorded with `attribute_changes` (`attributes`/`old`).
-- Custom business events are logged explicitly with `activity('<log_name>')->performedOn($model)->causedBy($user)->event('<event>')->withProperties([...])->log('<Spanish description>')`. Event names are snake_case (`issued`, `cancelled`, `impersonation_started`).
-- Impersonation: while `session('impersonator_id')` is set, every `Activity` created gets `properties.impersonator_id` (hook on `Activity::creating` in `AppServiceProvider`). Start/stop of impersonation are logged.
-- Config `config/activitylog.php`: `default_except_attributes => ['created_at', 'updated_at']`, `clean_after_days => null` (never auto-delete audit rows).
-- **Fiscal documents (Phase 2+):** invoices, credit/debit notes, receipts and purchase vouchers get `status` and `issued_at`. Once `issued_at` is set: `update`/`delete` on the model throw `App\Exceptions\ImmutableDocumentException` (enforced in the model's `updating`/`deleting` observers, allowing only the whitelisted columns `status`, `ecf_*`, `dgii_*`, `sent_at`, `paid_amount`, `balance`), and no UI route exists to edit them. Corrections are new documents (credit/debit notes). XML and DGII responses are stored as immutable files (`storage/app/private/ecf/<year>/<encf>/...`, never overwritten).
-- Activity log viewer (Phase 1) is read-only; no route deletes `activity_log` rows.
+User requirement (approved amendment): *"debe quedar registro de todo, y debe haber auditoría"*. Every phase plan inherits §6 and must add, per task, tests asserting the audit rows for every model and action it introduces (§6.6).
+
+### 6.1 What is logged (spatie/laravel-activitylog v5, table `activity_log`)
+- **Every Eloquent model** — master data, documents, settings, pivot-backed models (`PriceListItem`, `ClientContact`, `SupplierContact`, …) — uses `App\Models\Concerns\LogsModelActivity`: `created`/`updated`/`deleted` with `attribute_changes.old` / `.attributes` (`logOnly(['*'])`, `logOnlyDirty()`, `dontLogEmptyChanges()`, log name = table name). An `is_active` change gets the explicit description `Registro activado` / `Registro desactivado`; any other state transition (document status, approval, issuance, cancellation, posting) is logged explicitly with `event('<snake_case>')` and a Spanish description naming the transition.
+- **Pivot assignments without a model**: spatie role/permission changes are logged from spatie's events (`RoleAttachedEvent`, `RoleDetachedEvent`, `PermissionAttachedEvent`, `PermissionDetachedEvent`; `config('permission.events_enabled') = true`) as `role_assigned`, `role_removed`, `permission_granted`, `permission_revoked` in log `access`; product ↔ additional-tax sync is logged by `SaveProduct` as `additional_taxes_synced` (before/after codes).
+- **Auth** (log `auth`): `login`, `login_rejected` (`properties.reason` ∈ `unverified`, `hd_missing`, `domain`, `not_invited`, `inactive`, `oauth_error`; `properties.email`), `logout`, `impersonation_started`, `impersonation_stopped`.
+- **Exports** (log `exports`, event `exported`): `table` (base name), `format`, `filters` (query string array), `row_count` — written inside `TableExport::fromQuery`, so every export in the system (index tables, price-list items, activity log itself) is logged. **Templates**: log `imports`, event `template_downloaded` (`type`). **Imports**: `previewed` (file name, totals), `confirmed` (created/updated counts), `cancelled`.
+- **Settings** (log `settings`, `updated`, `keys`; each `Setting` row also logs old/new), **exchange rates** (model events + `fetched` {count, source} + `fetch_failed` {message}), **role matrix** (`roles`, `permissions_updated` {added, removed}), **users** (`activated` / `deactivated` with description "Usuario X activado/desactivado"), **fiscal-id override** (`tax_id_validation_overridden` with reason).
+- **Phase 2+**: fiscal documents log every status transition, fiscal numbering assignment, DGII submission and response, PDF generation and email sending; inventory movements log their source document; accounting entries log posting/unposting and period locks; commissions log accrual, approval and payment; Gmail sync logs each synced mailbox run.
+
+### 6.2 Row context
+`activity_log` carries extra columns (Phase 1 Task 7 migration): `impersonator_id` (FK `users`, nullable), `ip` (string 45), `user_agent` (string 500), `request_id` (string 36, UUID). They are filled automatically by the `Activity::creating` hook in `AppServiceProvider`: causer = authenticated user (the impersonated user while impersonating; the real person goes to `impersonator_id`), `ip`/`user_agent` from the request, `request_id` from `App\Http\Middleware\AssignRequestId` (UUID per request, also returned as response header `X-Request-Id`). Console/queue work stores `user_agent = 'console'`, `ip = null`, `request_id = null`.
+
+### 6.3 Append-only
+- No route updates or deletes audit rows; `config('activitylog.clean_after_days') = null`.
+- Model guard: `config('activitylog.activity_model') = App\Models\ActivityLog` (extends spatie's `Activity`); its `updating`/`deleting` hooks throw `App\Exceptions\AppendOnlyAuditException` ("La bitácora de auditoría es de solo escritura").
+- Database guard (chosen over `REVOKE` because the application connects with a single database role): PostgreSQL trigger `activity_log_append_only` — `BEFORE UPDATE OR DELETE ON activity_log FOR EACH ROW EXECUTE FUNCTION prevent_activity_log_mutation()` whose body is `RAISE EXCEPTION 'activity_log is append-only'`. Created by the Phase 1 Task 7 migration (and recreated by `migrate:fresh`); any attempt from any code path fails with SQLSTATE P0001.
+
+### 6.4 Viewer and per-record history
+Phase 1 Task 23 ships the viewer: filters by user, log name (model), subject type + id, event, date range and text; detail dialog with a field-by-field diff; xlsx/csv export (itself logged). Every master-data edit page has a **"Historial"** tab (`@/components/erp/record-history`, fed by `App\Support\AuditHistory::for(Model $m, int $limit = 100): array`), and later phases add it to every document page.
+
+### 6.5 Immutability of fiscal documents (Phase 2+)
+Invoices, credit/debit notes, receipts and purchase vouchers get `status` and `issued_at`. Once `issued_at` is set: `update`/`delete` on the model throw `App\Exceptions\ImmutableDocumentException` (enforced in the model's `updating`/`deleting` observers, allowing only the whitelisted columns `status`, `ecf_*`, `dgii_*`, `sent_at`, `paid_amount`, `balance`), and no UI route exists to edit them. Corrections are new documents (credit/debit notes). XML and DGII responses are stored as immutable files (`storage/app/private/ecf/<year>/<encf>/...`, never overwritten).
+
+### 6.6 Tests
+Every task that adds a model, pivot, action, export, import or auth path adds tests asserting the audit rows: log name, event, causer, old/new values, and (where the task says so) `ip`/`user_agent`/`request_id`/`impersonator_id`. Phase plans list them per task; a phase plan without audit tests for a new model is incomplete.
 
 ---
 
@@ -317,7 +337,9 @@ Diff: <one paragraph>
 
 ## 12. Phase roadmap (spec §9) and the interfaces each later plan exposes
 
-**Phase 1 — Base** (`2026-10-29-01-fase1-base.md`): project scaffold on the React starter kit, PostgreSQL via Docker, Laravel Boost, Google Workspace login (Socialite; server-side `hd` claim check; invited/active users only; `SUPER_ADMIN_EMAILS` allowlist), users/roles/permissions with Super Admin rules and audited impersonation, activity log, Spanish app shell, master data (clients with RNC/cédula validation, contacts, suppliers, brands, categories, units, products with ITBIS rate, additional taxes table, lot flag, price lists, salespeople, warehouses, currencies and exchange rates with swappable source + scheduled fetch + failure alert, bank accounts/cash boxes), generic xlsx/csv export of every table, Excel importers with templates and per-row preview, settings screens. *Exposes:* models and factories for all master data; `Decimal` helper; `FiscalId`; `ExchangeRateService::rateFor()/convert()`; `PermissionCatalog`; `TableExport`; `ImportBatch` framework; `DataTable`/`FormField`/`PageHeader` React components; `can()`; settings service `Settings::get/set`.
+**Rule for every later plan:** each task that introduces a model, pivot, state transition, export, import or integration call must list the audit rows it writes (ARCH §6.1) and the tests that assert them (ARCH §6.6), and every document page gets the "Historial" tab (ARCH §6.4).
+
+**Phase 1 — Base** (`2026-10-29-01-fase1-base.md`): project scaffold on the React starter kit, PostgreSQL via Docker, Laravel Boost, Google Workspace login (Socialite; server-side `hd` claim check; invited/active users only; `SUPER_ADMIN_EMAILS` allowlist), users/roles/permissions with Super Admin rules and audited impersonation, append-only activity log with request context and full coverage (ARCH §6), Spanish app shell, master data (clients with RNC/cédula validation and an audited override for numbers that fail the checksum, contacts, suppliers, brands, categories, units, products with ITBIS rate, additional taxes table, lot flag, price lists, salespeople, warehouses, currencies and exchange rates with swappable source + scheduled fetch + failure alert, bank accounts/cash boxes), generic xlsx/csv export of every table, Excel importers with templates and per-row preview, settings screens. *Exposes:* models and factories for all master data; `Decimal` helper; `FiscalId`; `ExchangeRateService::rateFor()/convert()`; `PermissionCatalog`; `TableExport`; `ImportBatch` framework; `DataTable`/`FormField`/`PageHeader` React components; `can()`; settings service `Settings::get/set`.
 
 **Phase 2 — Sales with traditional NCF + basic inventory** (`...-02-fase2-ventas-ncf.md`): proformas (states, PDF, duplicate, partial conversion), invoices (B01/B02/B14/B15 numbering via `FiscalNumberingService` + `ncf_sequences` with expiry and <10 % alerts), credit/debit notes (B04/B03), receipts (cobros) with partial application, retentions and advances, client statements and aging, dispatches/conduces with reservations, returns, initial stock import with lots (FEFO suggestion), kardex, minimum-stock alerts, document numbering, dompdf templates, email sending via Gmail API (send-as-user, OAuth scope `gmail.send`), historical open invoices import, and an `accounting_events` outbox table (every financial event is recorded as a row so Phase 5 can generate entries retroactively). *Exposes:* `Proforma`, `Invoice`, `InvoiceLine`, `CreditNote`, `DebitNote`, `Receipt`, `Dispatch`, `StockMovement`, `Lot`, `StockBalance`; `FiscalNumberingService::assign(Document): FiscalNumber`; `DocumentTotalsCalculator` (uses §4 rules); `AccountingEventRecorder::record(event, payload)`; `InventoryService::reserve/release/dispatch/return`; PDF `DocumentPdf` renderer; `GmailSender` interface with `LogGmailSender` fake.
 
