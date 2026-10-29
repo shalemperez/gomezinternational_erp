@@ -59,7 +59,7 @@ return [
      * buffer is flushed.
      */
     'buffer' => [
-        'enabled' => env('ACTIVITYLOG_BUFFER_ENABLED', false),
+        'enabled' => false,
     ],
 
     /*

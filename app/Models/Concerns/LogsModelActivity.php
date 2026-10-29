@@ -13,6 +13,7 @@ trait LogsModelActivity
     {
         return LogOptions::defaults()
             ->logOnly(['*'])
+            ->logExcept(['password', 'remember_token'])
             ->logOnlyDirty()
             ->dontLogEmptyChanges()
             ->useLogName($this->getTable())
