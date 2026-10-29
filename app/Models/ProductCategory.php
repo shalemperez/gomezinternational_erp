@@ -32,4 +32,20 @@ class ProductCategory extends Model
     {
         return $this->hasMany(ProductCategory::class, 'parent_id');
     }
+
+    /** @return list<int> ids of this category and all of its descendants */
+    public function selfAndDescendantIds(): array
+    {
+        $ids = [(int) $this->id];
+        $frontier = [(int) $this->id];
+        while ($frontier !== []) {
+            /** @var list<int> $children */
+            $children = self::query()->whereIn('parent_id', $frontier)->pluck('id')->map(fn ($id): int => (int) $id)->all();
+            $children = array_values(array_diff($children, $ids));
+            $ids = [...$ids, ...$children];
+            $frontier = $children;
+        }
+
+        return $ids;
+    }
 }

@@ -15,7 +15,7 @@ class UpdateProductCategoryRequest extends StoreProductCategoryRequest
 
         return [
             'name' => ['required', 'string', 'max:100', Rule::unique('product_categories', 'name')->ignore($category)],
-            'parent_id' => ['nullable', 'integer', 'exists:product_categories,id', Rule::notIn([$category->id])],
+            'parent_id' => ['nullable', 'integer', 'exists:product_categories,id', Rule::notIn($category->selfAndDescendantIds())],
             'is_active' => ['boolean'],
         ];
     }
@@ -23,6 +23,6 @@ class UpdateProductCategoryRequest extends StoreProductCategoryRequest
     /** @return array<string, string> */
     public function messages(): array
     {
-        return ['parent_id.not_in' => 'Una categoría no puede ser su propia categoría padre.'];
+        return ['parent_id.not_in' => 'Una categoría no puede tener como padre a sí misma ni a una de sus subcategorías.'];
     }
 }

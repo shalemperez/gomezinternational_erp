@@ -53,7 +53,10 @@ class ProductCategoryController extends Controller
         return Inertia::render('catalog/categories/form', [
             'category' => $category,
             'history' => AuditHistory::for($category),
-            'parents' => ProductCategory::query()->where('is_active', true)->whereKeyNot($category->id)->orderBy('name')->get(['id', 'name']),
+            'parents' => ProductCategory::query()
+                ->where(fn ($q) => $q->where('is_active', true)->orWhereKey($category->parent_id))
+                ->whereKeyNot($category->selfAndDescendantIds())
+                ->orderBy('name')->get(['id', 'name']),
         ]);
     }
 
