@@ -61,7 +61,12 @@ class ProductsImporter extends BaseImporter
         $row['sku'] = isset($row['sku']) ? strtoupper($row['sku']) : null;
         $row['unit_code'] = isset($row['unit_code']) ? strtoupper($row['unit_code']) : null;
         $row['itbis_rate'] = $this->normalizeItbisRate($row['itbis_rate'] ?? null);
-        $row['tracks_lots'] = in_array(Str::slug((string) ($row['tracks_lots'] ?? '')), ['si', 'yes', 'true', '1'], true);
+        $lots = Str::slug((string) ($row['tracks_lots'] ?? ''));
+        $row['tracks_lots'] = match (true) {
+            in_array($lots, ['si', 'yes', 'true', '1'], true) => true,
+            in_array($lots, ['no', 'false', '0'], true) => false,
+            default => null, // blank or absent: keep the existing value on update, column default on create
+        };
         $row['additional_tax_codes'] = implode(';', $this->additionalTaxCodes($row));
 
         return $row;
@@ -89,7 +94,7 @@ class ProductsImporter extends BaseImporter
             'volume_liters' => ['nullable', 'numeric', 'min:0', 'max:999999.9999'],
             'alcohol_degree' => ['nullable', 'numeric', 'between:0,100'],
             'itbis_rate' => ['required', Rule::in(['18.00', '16.00', '0.00'])],
-            'tracks_lots' => ['boolean'],
+            'tracks_lots' => ['nullable', 'boolean'],
             'tariff_code' => ['nullable', 'string', 'max:20'],
             'minimum_stock' => ['nullable', 'numeric', 'min:0', 'max:9999999999.9999'],
             'additional_tax_codes' => ['nullable', 'string', function (string $attribute, mixed $value, \Closure $fail) use ($codes, $row): void {

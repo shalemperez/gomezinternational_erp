@@ -7,6 +7,7 @@ use App\Models\PriceList;
 use App\Models\PriceListItem;
 use App\Models\Product;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Validation\Rule;
 
 class PriceListItemsImporter extends BaseImporter
 {
@@ -48,7 +49,7 @@ class PriceListItemsImporter extends BaseImporter
     /** @return array<string, mixed> */
     public function metaRules(): array
     {
-        return ['price_list_id' => ['required', 'integer', 'exists:price_lists,id']];
+        return ['price_list_id' => ['required', 'integer', Rule::exists('price_lists', 'id')->where('is_active', true)]];
     }
 
     /**

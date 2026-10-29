@@ -25,3 +25,16 @@ test('preview and confirm suppliers with create update and invalid rows', functi
     $this->post(route('admin.imports.confirm', $batch))->assertSessionHas('success', 'Importación completada: 1 creados, 1 actualizados');
     expect(Supplier::where('name', 'Nuevo LLC')->first()->code)->toMatch('/^PRV-\d{5}$/')->and($existing->fresh()->name)->toBe('Actualizado SRL');
 });
+
+test('an import never changes an existing supplier code country or foreign tax id', function () {
+    $s = Supplier::factory()->create(['code' => 'PRV-90001', 'country_code' => 'US', 'foreign_tax_id' => 'US-11', 'tax_id' => null, 'name' => 'Viejo']);
+    actingAsRole('accounting');
+    $file = makeSpreadsheet([
+        ['Código', 'Nombre', 'País', 'ID fiscal extranjera', 'Moneda'],
+        ['PRV-90001', 'Nuevo Nombre', 'ES', 'ES-22', 'USD'],
+    ]);
+    $this->post(route('admin.imports.preview', 'suppliers'), ['file' => $file])->assertRedirect();
+    $this->post(route('admin.imports.confirm', ImportBatch::latest('id')->firstOrFail()))->assertRedirect();
+    $s->refresh();
+    expect($s->name)->toBe('Nuevo Nombre')->and($s->code)->toBe('PRV-90001')->and($s->country_code)->toBe('US')->and($s->foreign_tax_id)->toBe('US-11');
+});

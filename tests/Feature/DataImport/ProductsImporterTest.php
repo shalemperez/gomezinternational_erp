@@ -42,3 +42,16 @@ test('liter tax without volume is invalid', function () {
     $this->post(route('admin.imports.preview', 'products'), ['file' => $file]);
     expect(ImportBatch::latest('id')->first()->rows()->first()->errors['additional_tax_codes'])->toBe('Los impuestos por litro requieren el volumen en litros del producto.');
 });
+
+test('a blank lot-control cell keeps the existing flag', function () {
+    UnitOfMeasure::factory()->create(['code' => 'UND']);
+    $p = Product::factory()->create(['sku' => 'LOT-1', 'tracks_lots' => true]);
+    actingAsRole('accounting');
+    $file = makeSpreadsheet([
+        ['SKU', 'Nombre', 'Unidad', 'ITBIS', 'Controla lotes'],
+        ['LOT-1', 'Con lotes', 'UND', '18', ''],
+    ]);
+    $this->post(route('admin.imports.preview', 'products'), ['file' => $file])->assertRedirect();
+    $this->post(route('admin.imports.confirm', ImportBatch::latest('id')->firstOrFail()))->assertRedirect();
+    expect($p->fresh()->tracks_lots)->toBeTrue();
+});

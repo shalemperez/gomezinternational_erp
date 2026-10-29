@@ -150,23 +150,28 @@ class SuppliersImporter extends BaseImporter
         $supplier = $existing ?? new Supplier;
         $attributes = [
             'name' => $row['name'] ?? null,
-            'country_code' => $row['country_code'] ?? null,
-            'foreign_tax_id' => $row['foreign_tax_id'] ?? null,
             'currency_id' => Currency::query()->where('code', $row['currency_code'])->value('id'),
             'credit_days' => filled($row['credit_days'] ?? null) ? (int) $row['credit_days'] : null,
             'address' => $row['address'] ?? null,
             'phone' => $row['phone'] ?? null,
             'email' => $row['email'] ?? null,
         ];
+        if ($existing === null) {
+            $attributes['country_code'] = $row['country_code'] ?? null;
+        }
+        // An existing record's fiscal identity (country, RNC, foreign tax id) is never changed by an import.
         if ($existing === null || blank($supplier->tax_id)) {
             $attributes['tax_id'] = $row['tax_id'] ?? null;
+        }
+        if ($existing === null || blank($supplier->foreign_tax_id)) {
+            $attributes['foreign_tax_id'] = $row['foreign_tax_id'] ?? null;
         }
         // On update, blank cells and absent columns never overwrite existing data.
         $supplier->fill($existing === null ? $attributes : array_filter($attributes, fn (mixed $v): bool => $v !== null));
         if ($existing === null) {
             $supplier->credit_days ??= 0;
         }
-        if (filled($row['code'] ?? null)) {
+        if (! $supplier->exists && filled($row['code'] ?? null)) {
             $supplier->code = (string) $row['code'];
         } elseif (! $supplier->exists && blank($supplier->code)) {
             $supplier->setAttribute('id', (int) DB::scalar("select nextval(pg_get_serial_sequence('suppliers', 'id'))"));
