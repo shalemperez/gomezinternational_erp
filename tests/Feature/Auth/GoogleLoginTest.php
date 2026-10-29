@@ -5,9 +5,12 @@ use Database\Seeders\PermissionSeeder;
 use Laravel\Socialite\Facades\Socialite;
 use Laravel\Socialite\Two\User as GoogleUser;
 use Spatie\Activitylog\Models\Activity;
+use Spatie\Permission\Models\Role;
 
 beforeEach(function () {
-    (new PermissionSeeder)->run();
+    if (! Role::query()->exists()) {
+        (new PermissionSeeder)->run();
+    }
     config(['erp.google_workspace_domain' => 'empresa.test', 'erp.super_admin_emails' => ['soporte@externo.test']]);
 });
 
