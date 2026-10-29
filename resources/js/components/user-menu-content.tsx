@@ -1,4 +1,4 @@
-import { Link, router } from '@inertiajs/react';
+import { Link, router, usePage } from '@inertiajs/react';
 import { LogOut } from 'lucide-react';
 import {
     DropdownMenuItem,
@@ -8,6 +8,7 @@ import {
 import { UserInfo } from '@/components/user-info';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { logout } from '@/routes';
+import { stop } from '@/routes/admin/impersonate';
 import type { User } from '@/types';
 
 type Props = {
@@ -16,6 +17,7 @@ type Props = {
 
 export function UserMenuContent({ user }: Props) {
     const cleanup = useMobileNavigation();
+    const { auth } = usePage().props;
 
     const handleLogout = () => {
         cleanup();
@@ -30,6 +32,11 @@ export function UserMenuContent({ user }: Props) {
                 </div>
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
+            {auth.impersonator && (
+                <DropdownMenuItem onSelect={() => router.delete(stop.url())}>
+                    Volver a mi cuenta
+                </DropdownMenuItem>
+            )}
             <DropdownMenuItem asChild>
                 <Link
                     className="block w-full cursor-pointer"

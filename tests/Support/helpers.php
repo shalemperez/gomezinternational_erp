@@ -13,3 +13,12 @@ function actingAsRole(string $role, array $attributes = []): User
 
     return $user;
 }
+
+function validUserPayload(array $over = []): array
+{
+    return array_merge([
+        'name' => 'Luis Mena',
+        'email' => 'luis@empresa.test',
+        'roles' => ['sales'],
+    ], $over);
+}
