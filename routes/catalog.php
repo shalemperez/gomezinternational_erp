@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Catalog\AdditionalTaxController;
 use App\Http\Controllers\Catalog\BrandController;
+use App\Http\Controllers\Catalog\PriceListController;
 use App\Http\Controllers\Catalog\ProductCategoryController;
 use App\Http\Controllers\Catalog\ProductController;
 use App\Http\Controllers\Catalog\SalespersonController;
@@ -23,6 +24,12 @@ Route::middleware(['auth'])->prefix('catalog')->name('catalog.')->group(function
 
     Route::get('products/export', [ProductController::class, 'export'])->name('products.export');
     Route::resource('products', ProductController::class)->except(['show']);
+
+    Route::get('price-lists/export', [PriceListController::class, 'export'])->name('price-lists.export');
+    Route::get('price-lists/{priceList}/items', [PriceListController::class, 'items'])->name('price-lists.items');
+    Route::put('price-lists/{priceList}/items', [PriceListController::class, 'updateItems'])->name('price-lists.items.update');
+    Route::get('price-lists/{priceList}/items/export', [PriceListController::class, 'exportItems'])->name('price-lists.items.export');
+    Route::resource('price-lists', PriceListController::class)->except(['show'])->parameters(['price-lists' => 'priceList']);
 
     Route::get('salespeople/export', [SalespersonController::class, 'export'])->name('salespeople.export');
     Route::resource('salespeople', SalespersonController::class)->except(['show'])->parameters(['salespeople' => 'salesperson']);

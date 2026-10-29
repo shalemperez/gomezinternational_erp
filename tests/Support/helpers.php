@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\Currency;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
@@ -66,4 +67,11 @@ function validProductPayload(array $over = []): array
         'unit_of_measure_id' => $unit->id, 'units_per_box' => 12, 'weight_kg' => '', 'volume_liters' => '', 'alcohol_degree' => '',
         'itbis_rate' => '18.00', 'tracks_lots' => '', 'tariff_code' => '', 'minimum_stock' => '0', 'description' => '', 'additional_tax_ids' => [], 'is_active' => 'on',
     ], $over);
+}
+
+function validPriceListPayload(array $over = []): array
+{
+    $currency = Currency::query()->firstOr(fn () => Currency::factory()->create(['code' => 'DOP', 'is_base' => true]));
+
+    return array_merge(['name' => 'Lista de prueba', 'currency_id' => $currency->id, 'is_default' => '', 'is_active' => 'on'], $over);
 }

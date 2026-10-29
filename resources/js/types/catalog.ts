@@ -61,3 +61,17 @@ export type Product = {
     unit?: { id: number; code: string } | null;
     additional_tax_ids?: number[];
 };
+export type PriceList = {
+    id: number;
+    name: string;
+    currency_id: number;
+    is_default: boolean;
+    is_active: boolean;
+    currency?: { id: number; code: string } | null;
+};
+export type PriceListProductRow = {
+    id: number;
+    sku: string;
+    name: string;
+    price: string | null;
+};
