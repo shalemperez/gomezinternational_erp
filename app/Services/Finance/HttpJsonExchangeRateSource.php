@@ -34,6 +34,11 @@ class HttpJsonExchangeRateSource implements ExchangeRateSource
             throw new RuntimeException("La respuesta no contiene una tasa numérica en la ruta '{$path}'.");
         }
 
-        return new FetchedRate(Decimal::rate((string) $value), is_array($json) ? $json : []);
+        $rate = Decimal::rate((string) $value);
+        if (Decimal::cmp($rate, '0') <= 0 || Decimal::cmp($rate, '999999.999999') > 0) {
+            throw new RuntimeException("La fuente externa devolvió una tasa inválida ({$rate}) para {$currency->code}.");
+        }
+
+        return new FetchedRate($rate, is_array($json) ? $json : []);
     }
 }

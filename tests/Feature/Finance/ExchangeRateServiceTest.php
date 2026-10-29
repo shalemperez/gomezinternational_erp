@@ -98,3 +98,18 @@ test('job failure notifies managers and records and logs the error', function ()
     expect(app(Settings::class)->get('exchange_rates.last_fetch_error')['message'])->toBe('timeout')
         ->and(Activity::inLog('exchange_rates')->where('event', 'fetch_failed')->exists())->toBeTrue();
 });
+
+test('http json source rejects zero, negative and oversized rates', function (mixed $value) {
+    configureHttpSource('rate');
+    Http::fake(['rates.test/*' => Http::response(['rate' => $value])]);
+
+    expect(fn () => app(ExchangeRateService::class)->fetchToday())->toThrow(RuntimeException::class, 'La fuente externa devolvió una tasa inválida');
+    expect(ExchangeRate::count())->toBe(0);
+})->with([0, '0.000000', -58, '1000000']);
+
+test('recorded fetch errors never keep url query strings', function () {
+    app(ExchangeRateService::class)->recordFailure('cURL error 6: Could not resolve host for https://rates.test/USD?apikey=SECRET123');
+
+    $message = app(Settings::class)->get('exchange_rates.last_fetch_error')['message'];
+    expect($message)->not->toContain('SECRET123')->toContain('https://rates.test/USD?…');
+});

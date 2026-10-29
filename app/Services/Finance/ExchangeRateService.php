@@ -67,6 +67,7 @@ class ExchangeRateService
     /** Records a failed automatic fetch (used by the job and by the manual "fetch now" action). */
     public function recordFailure(string $message): void
     {
+        $message = (string) preg_replace('/\?[^\s\'"]*/', '?…', $message); // never store URL query strings (may contain API keys)
         $this->settings->set('exchange_rates.last_fetch_error', ['at' => now()->toIso8601String(), 'message' => $message]);
         activity('exchange_rates')->event('fetch_failed')->withProperties(['message' => $message])->log('Falló la obtención automática de tasas');
     }
