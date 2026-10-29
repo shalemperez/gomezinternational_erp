@@ -1,11 +1,13 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use Inertia\Inertia;
 
-Route::inertia('/', 'welcome')->name('home');
+Route::get('/', fn () => redirect()->route(auth()->check() ? 'dashboard' : 'login'))->name('home');
 
-Route::middleware(['auth', 'verified'])->group(function () {
+// Placeholder until Task 6 replaces it with the Google login page.
+Route::get('login', fn () => Inertia::render('auth/login'))->middleware('guest')->name('login');
+
+Route::middleware(['auth'])->group(function () {
     Route::inertia('dashboard', 'dashboard')->name('dashboard');
 });
-
-require __DIR__.'/settings.php';
