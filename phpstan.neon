@@ -11,6 +11,3 @@ parameters:
         - routes/
 
     level: 7
-
-    ignoreErrors:
-        - '#Function activity not found#'   # temporary until Task 7 installs spatie/laravel-activitylog
