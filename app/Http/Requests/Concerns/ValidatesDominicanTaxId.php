@@ -21,6 +21,9 @@ trait ValidatesDominicanTaxId
         $taxId = (string) $this->input($taxIdField);
         $override = $this->boolean('tax_id_override');
         $isLocal = $countryField === null || $this->input($countryField) === 'DO';
+        $keepsOverride = ! $override && $ignore !== null
+            && (bool) $ignore->getAttribute('tax_id_validation_overridden')
+            && preg_replace('/\D/', '', $taxId) === (string) $ignore->getAttribute($taxIdField);
 
         if ($override && ! $this->user()->can('catalog.tax-ids.override-validation')) {
             throw new AuthorizationException('No tienes permiso para forzar la identificación fiscal.');
@@ -42,7 +45,7 @@ trait ValidatesDominicanTaxId
 
         if (in_array($type, ['rnc', 'cedula'], true) && $taxId !== '') {
             $digits = $type === 'rnc' ? 9 : 11;
-            $validator->sometimes($taxIdField, $override ? ["digits:{$digits}"] : [new DominicanTaxId($type)], fn () => true);
+            $validator->sometimes($taxIdField, ($override || $keepsOverride) ? ["digits:{$digits}"] : [new DominicanTaxId($type)], fn () => true);
         }
 
         $validator->sometimes('tax_id_override_reason', ['required', 'string', 'max:255'], fn () => $override);

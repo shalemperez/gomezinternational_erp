@@ -58,10 +58,14 @@ test('sales user sees and edits only own clients and new clients are assigned to
 
     $this->get(route('catalog.clients.index'))->assertInertia(fn ($p) => $p->where('rows.total', 1)->where('rows.data.0.id', $own->id));
     $this->get(route('catalog.clients.edit', $foreign))->assertForbidden();
+    $this->put(route('catalog.clients.update', $foreign), validClientPayload(['tax_id' => $foreign->tax_id, 'business_name' => 'Hackeado SRL']))->assertForbidden();
+    $this->delete(route('catalog.clients.destroy', $foreign))->assertForbidden();
+    expect($foreign->fresh())->not->toBeNull()->and($foreign->fresh()->business_name)->not->toBe('Hackeado SRL');
+    $this->get(route('catalog.clients.index', ['search' => $foreign->business_name]))->assertInertia(fn ($p) => $p->where('rows.total', 0));
     $this->get(route('catalog.clients.edit', $own))->assertOk();
     $this->post(route('catalog.clients.store'), validClientPayload(['tax_id' => fakeRnc(), 'salesperson_id' => $other->id]))->assertRedirect(route('catalog.clients.index'));
     expect(Client::latest('id')->first()->salesperson_id)->toBe($mine->id);
-    $response = $this->get(route('catalog.clients.export', ['format' => 'csv']));
+    $this->get(route('catalog.clients.export', ['format' => 'csv']));
     expect(Activity::inLog('exports')->latest('id')->first()->properties['row_count'])->toBe(2);
 });
 
@@ -108,4 +112,13 @@ test('a client created without code gets CLI code from its id and an update with
 
     $this->put(route('catalog.clients.update', $client), validClientPayload(['code' => '', 'name' => 'Nombre Nuevo', 'tax_id' => $client->tax_id]))->assertRedirect();
     expect($client->fresh()->code)->toBe('CLI-'.str_pad((string) $client->id, 5, '0', STR_PAD_LEFT));
+});
+
+test('editing an overridden client without changing its tax id keeps the override', function () {
+    $owner = actingAsRole('owner');
+    $c = Client::factory()->create(['tax_id' => '101850042', 'tax_id_type' => 'rnc', 'tax_id_validation_overridden' => true, 'tax_id_override_reason' => 'x', 'tax_id_override_by' => $owner->id, 'tax_id_override_at' => now()]);
+
+    $this->put(route('catalog.clients.update', $c), validClientPayload(['tax_id' => '101850042', 'business_name' => 'Nombre Editado SRL']))->assertRedirect(route('catalog.clients.index'));
+    $c->refresh();
+    expect($c->business_name)->toBe('Nombre Editado SRL')->and($c->tax_id_validation_overridden)->toBeTrue()->and($c->tax_id_override_reason)->toBe('x');
 });

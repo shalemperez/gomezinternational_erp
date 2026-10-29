@@ -24,7 +24,7 @@ class ApplyTaxIdOverride
 
             return;
         }
-        if ($record->getAttribute('tax_id_validation_overridden')) {
+        if ($record->getAttribute('tax_id_validation_overridden') && $record->wasChanged('tax_id')) {
             $record->forceFill(['tax_id_validation_overridden' => false, 'tax_id_override_reason' => null, 'tax_id_override_by' => null, 'tax_id_override_at' => null])->save();
         }
     }
