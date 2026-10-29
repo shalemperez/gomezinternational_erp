@@ -3,6 +3,7 @@
 use App\Models\Currency;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
+use App\Support\FiscalId;
 use Database\Seeders\PermissionSeeder;
 use Spatie\Permission\Models\Role;
 
@@ -74,4 +75,24 @@ function validPriceListPayload(array $over = []): array
     $currency = Currency::query()->firstOr(fn () => Currency::factory()->create(['code' => 'DOP', 'is_base' => true]));
 
     return array_merge(['name' => 'Lista de prueba', 'currency_id' => $currency->id, 'is_default' => '', 'is_active' => 'on'], $over);
+}
+
+function validClientPayload(array $over = []): array
+{
+    $currency = Currency::query()->where('is_base', true)->firstOr(fn () => Currency::factory()->create(['code' => 'DOP', 'is_base' => true]));
+
+    return array_merge([
+        'code' => '', 'business_name' => 'Distribuidora Ejemplo SRL', 'trade_name' => 'Ejemplo', 'tax_id_type' => 'rnc', 'tax_id' => '1-31-24679-6',
+        'taxpayer_type' => 'juridica', 'address' => 'Av. Principal 1', 'city' => 'Santo Domingo', 'phone' => '809-555-0000', 'email' => 'ventas@ejemplo.test',
+        'salesperson_id' => '', 'credit_days' => 30, 'credit_limit' => '100000', 'price_list_id' => '', 'currency_id' => $currency->id, 'notes' => '',
+        'contacts' => [], 'tax_id_override' => '', 'tax_id_override_reason' => '', 'is_active' => 'on',
+    ], $over);
+}
+
+/** A syntactically valid RNC whose first eight digits are random (starts with 1). */
+function fakeRnc(): string
+{
+    $first = '1'.str_pad((string) random_int(0, 9999999), 7, '0', STR_PAD_LEFT);
+
+    return $first.FiscalId::rncCheckDigit($first);
 }
