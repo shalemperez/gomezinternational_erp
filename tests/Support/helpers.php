@@ -30,3 +30,18 @@ function validCurrencyPayload(array $over = []): array
 {
     return array_merge(['code' => 'EUR', 'name' => 'Euro', 'symbol' => '€', 'decimal_places' => 2, 'is_active' => 'on'], $over);
 }
+
+function validBrandPayload(array $over = []): array
+{
+    return array_merge(['name' => 'Marca Nueva', 'is_active' => 'on'], $over);
+}
+
+function validCategoryPayload(array $over = []): array
+{
+    return array_merge(['name' => 'Categoría Nueva', 'parent_id' => '', 'is_active' => 'on'], $over);
+}
+
+function validUnitPayload(array $over = []): array
+{
+    return array_merge(['code' => 'DOC', 'name' => 'Docena', 'is_active' => 'on'], $over);
+}
