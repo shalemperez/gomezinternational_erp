@@ -16,7 +16,7 @@ class LoginWithGoogle
     {
         $raw = $googleUser instanceof \Laravel\Socialite\Two\User ? $googleUser->getRaw() : [];
         $email = strtolower(trim((string) $googleUser->getEmail()));
-        $domain = (string) config('erp.google_workspace_domain');
+        $domain = strtolower(trim((string) config('erp.google_workspace_domain')));
         $isSupport = in_array($email, config('erp.super_admin_emails', []), true);
 
         if (($raw['email_verified'] ?? false) !== true) {
@@ -28,7 +28,7 @@ class LoginWithGoogle
             if ($hd === null) {
                 throw new LoginRejectedException("Solo se permite iniciar sesión con una cuenta de Google Workspace de {$domain}.", $email, 'hd_missing');
             }
-            if ($domain === '' || $hd !== $domain) {
+            if ($domain === '' || strtolower((string) $hd) !== $domain) {
                 throw new LoginRejectedException("Solo se permite iniciar sesión con una cuenta de Google Workspace de {$domain}.", $email, 'domain');
             }
         }
@@ -47,8 +47,13 @@ class LoginWithGoogle
             throw new LoginRejectedException('Tu cuenta está desactivada. Contacta a un administrador.', $email, 'inactive');
         }
 
+        $googleId = (string) $googleUser->getId();
+        if ($user->google_id !== null && $user->google_id !== $googleId) {
+            throw new LoginRejectedException('Esta cuenta de Google no coincide con el usuario registrado. Contacta a un administrador.', $email, 'identity_mismatch');
+        }
+
         $user->forceFill([
-            'google_id' => (string) $googleUser->getId(),
+            'google_id' => $googleId,
             'avatar_url' => $googleUser->getAvatar(),
             'last_login_at' => now(),
         ])->save();

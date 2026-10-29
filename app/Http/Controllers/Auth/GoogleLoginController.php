@@ -32,7 +32,7 @@ class GoogleLoginController extends Controller
         try {
             $googleUser = Socialite::driver('google')->user();
         } catch (Throwable $e) {
-            activity('auth')->event('login_rejected')->withProperties(['email' => null, 'reason' => 'oauth_error', 'ip' => $request->ip(), 'message' => $e->getMessage()])->log('Inicio de sesión rechazado');
+            activity('auth')->event('login_rejected')->withProperties(['email' => null, 'reason' => 'oauth_error', 'ip' => $request->ip(), 'exception' => $e::class])->log('Inicio de sesión rechazado');
 
             return redirect()->route('login')->with('error', 'No se pudo completar el inicio de sesión con Google. Inténtalo de nuevo.');
         }

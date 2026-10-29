@@ -121,3 +121,43 @@ test('logout ends the session and is logged', function () {
     $this->assertGuest();
     expect(Activity::inLog('auth')->where('event', 'logout')->where('causer_id', $user->id)->exists())->toBeTrue();
 })->skip(! activityInstalled(), 'activitylog is installed in Task 7');
+
+test('login is rejected when the stored google id differs from the google account', function () {
+    User::factory()->create(['email' => 'ana@empresa.test', 'google_id' => 'google-OLD']);
+    fakeGoogle();
+
+    $this->get(route('auth.google.callback'))->assertRedirect(route('login'))
+        ->assertSessionHas('error', 'Esta cuenta de Google no coincide con el usuario registrado. Contacta a un administrador.');
+    $this->assertGuest();
+    expect(Activity::inLog('auth')->where('event', 'login_rejected')->latest('id')->first()?->getProperty('reason'))->toBe('identity_mismatch');
+});
+
+test('first login stores the google id and a later login with the same id succeeds', function () {
+    $user = User::factory()->create(['email' => 'ana@empresa.test', 'google_id' => null]);
+    fakeGoogle();
+    $this->get(route('auth.google.callback'))->assertRedirect(route('dashboard'));
+    expect($user->fresh()->google_id)->toBe('google-123');
+
+    auth()->logout();
+    fakeGoogle();
+    $this->get(route('auth.google.callback'))->assertRedirect(route('dashboard'));
+    $this->assertAuthenticatedAs($user->fresh());
+});
+
+test('workspace domain from config is compared case insensitively', function () {
+    config(['erp.google_workspace_domain' => 'Empresa.TEST']);
+    User::factory()->create(['email' => 'ana@empresa.test']);
+    fakeGoogle();
+
+    $this->get(route('auth.google.callback'))->assertRedirect(route('dashboard'));
+});
+
+test('oauth errors are logged without the raw provider message', function () {
+    Socialite::shouldReceive('driver->user')->andThrow(new RuntimeException('secret provider body'));
+
+    $this->get(route('auth.google.callback'))->assertRedirect(route('login'));
+    $row = Activity::inLog('auth')->where('event', 'login_rejected')->latest('id')->firstOrFail();
+    expect($row->getProperty('reason'))->toBe('oauth_error')
+        ->and($row->getProperty('exception'))->toBe(RuntimeException::class)
+        ->and($row->getProperty('message'))->toBeNull();
+});
