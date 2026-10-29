@@ -107,3 +107,8 @@ function validSupplierPayload(array $over = []): array
         'tax_id_override' => '', 'tax_id_override_reason' => '', 'is_active' => 'on',
     ], $over);
 }
+
+function validWarehousePayload(array $over = []): array
+{
+    return array_merge(['code' => 'ALM-02', 'name' => 'Almacén secundario', 'address' => '', 'is_default' => '', 'is_active' => 'on'], $over);
+}

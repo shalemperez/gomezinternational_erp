@@ -13,6 +13,7 @@ class DatabaseSeeder extends Seeder
             CurrencySeeder::class,
             UnitOfMeasureSeeder::class,
             SuperAdminSeeder::class,
+            WarehouseSeeder::class,
         ]);
     }
 }
