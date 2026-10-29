@@ -38,3 +38,26 @@ export type Salesperson = {
     is_active: boolean;
     user?: { id: number; name: string; email: string } | null;
 };
+export type Product = {
+    id: number;
+    sku: string;
+    barcode: string | null;
+    name: string;
+    brand_id: number | null;
+    category_id: number | null;
+    unit_of_measure_id: number;
+    units_per_box: number;
+    weight_kg: string | null;
+    volume_liters: string | null;
+    alcohol_degree: string | null;
+    itbis_rate: string;
+    tracks_lots: boolean;
+    tariff_code: string | null;
+    minimum_stock: string;
+    description: string | null;
+    is_active: boolean;
+    brand?: { id: number; name: string } | null;
+    category?: { id: number; name: string } | null;
+    unit?: { id: number; code: string } | null;
+    additional_tax_ids?: number[];
+};

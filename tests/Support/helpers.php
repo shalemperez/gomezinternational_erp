@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\UnitOfMeasure;
 use App\Models\User;
 use Database\Seeders\PermissionSeeder;
 use Spatie\Permission\Models\Role;
@@ -54,4 +55,15 @@ function validAdditionalTaxPayload(array $over = []): array
 function validSalespersonPayload(array $over = []): array
 {
     return array_merge(['code' => 'VEN-01', 'name' => 'Carlos Vendedor', 'email' => 'carlos@empresa.test', 'phone' => '809-555-0101', 'user_id' => '', 'is_active' => 'on'], $over);
+}
+
+function validProductPayload(array $over = []): array
+{
+    $unit = UnitOfMeasure::factory()->create();
+
+    return array_merge([
+        'sku' => 'SKU-TEST-001', 'barcode' => '', 'name' => 'Producto de prueba', 'brand_id' => '', 'category_id' => '',
+        'unit_of_measure_id' => $unit->id, 'units_per_box' => 12, 'weight_kg' => '', 'volume_liters' => '', 'alcohol_degree' => '',
+        'itbis_rate' => '18.00', 'tracks_lots' => '', 'tariff_code' => '', 'minimum_stock' => '0', 'description' => '', 'additional_tax_ids' => [], 'is_active' => 'on',
+    ], $over);
 }

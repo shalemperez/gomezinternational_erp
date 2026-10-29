@@ -7,6 +7,7 @@ use App\Models\Concerns\LogsModelActivity;
 use Database\Factories\AdditionalTaxFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 /**
  * @property AdditionalTaxCalculationType $calculation_type
@@ -27,5 +28,11 @@ class AdditionalTax extends Model
             'included_in_itbis_base' => 'boolean',
             'is_active' => 'boolean',
         ];
+    }
+
+    /** @return BelongsToMany<Product, $this> */
+    public function products(): BelongsToMany
+    {
+        return $this->belongsToMany(Product::class, 'additional_tax_product');
     }
 }
