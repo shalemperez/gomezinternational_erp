@@ -112,3 +112,10 @@ function validWarehousePayload(array $over = []): array
 {
     return array_merge(['code' => 'ALM-02', 'name' => 'Almacén secundario', 'address' => '', 'is_default' => '', 'is_active' => 'on'], $over);
 }
+
+function validFinancialAccountPayload(array $over = []): array
+{
+    $currency = Currency::query()->where('is_base', true)->firstOr(fn () => Currency::factory()->create(['code' => 'DOP', 'is_base' => true]));
+
+    return array_merge(['type' => 'bank', 'name' => 'Cuenta operativa', 'bank_name' => 'Banco Popular', 'account_number' => '0123456789', 'currency_id' => $currency->id, 'is_active' => 'on'], $over);
+}

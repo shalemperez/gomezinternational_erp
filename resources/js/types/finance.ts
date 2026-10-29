@@ -22,3 +22,14 @@ export type ExchangeRateRow = {
     currency: { id: number; code: string };
     creator: { name: string } | null;
 };
+export type FinancialAccount = {
+    id: number;
+    type: 'bank' | 'cash';
+    type_label?: string;
+    name: string;
+    bank_name: string | null;
+    account_number: string | null;
+    currency_id: number;
+    is_active: boolean;
+    currency?: { id: number; code: string } | null;
+};
