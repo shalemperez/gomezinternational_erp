@@ -20,6 +20,13 @@ import {
 } from '@/components/ui/table';
 import { cn } from '@/lib/utils';
 
+const cellText = (v: unknown): string =>
+    v === null || v === undefined
+        ? ''
+        : typeof v === 'string'
+          ? v
+          : JSON.stringify(v);
+
 export type Column<Row> = {
     key: string;
     label: string;
@@ -170,13 +177,13 @@ export function DataTable<Row extends { id: number }>({
                                     >
                                         {c.render
                                             ? c.render(row)
-                                            : String(
+                                            : cellText(
                                                   (
                                                       row as Record<
                                                           string,
                                                           unknown
                                                       >
-                                                  )[c.key] ?? '',
+                                                  )[c.key],
                                               )}
                                     </TableCell>
                                 ))}

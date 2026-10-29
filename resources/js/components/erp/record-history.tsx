@@ -14,7 +14,9 @@ const show = (v: unknown): string =>
         ? '—'
         : typeof v === 'object'
           ? JSON.stringify(v)
-          : String(v);
+          : typeof v === 'string'
+            ? v
+            : JSON.stringify(v);
 
 export function RecordHistory({ history }: { history: AuditEntry[] }) {
     if (history.length === 0) {

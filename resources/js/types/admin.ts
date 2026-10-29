@@ -9,3 +9,9 @@ export type AdminUserForm = Pick<
     User,
     'id' | 'name' | 'email' | 'is_active'
 > & { roles: string[] };
+export type RoleWithPermissions = {
+    name: string;
+    label: string;
+    permissions: string[];
+};
+export type PermissionOption = { name: string; label: string; module: string };
