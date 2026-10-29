@@ -27,8 +27,16 @@ class StorePriceListRequest extends FormRequest
         return [
             'name' => ['required', 'string', 'max:100', 'unique:price_lists,name'],
             'currency_id' => ['required', 'integer', 'exists:currencies,id'],
-            'is_default' => ['boolean'],
+            'is_default' => ['boolean', 'declined_if:is_active,false'],
             'is_active' => ['boolean'],
+        ];
+    }
+
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return [
+            'is_default.declined_if' => 'La lista predeterminada debe estar activa.',
         ];
     }
 }

@@ -23,7 +23,7 @@ class PriceList extends Model
 
     public static function default(): ?self
     {
-        return static::query()->where('is_default', true)->first();
+        return static::query()->where('is_default', true)->where('is_active', true)->first();
     }
 
     /** @return BelongsTo<Currency, $this> */

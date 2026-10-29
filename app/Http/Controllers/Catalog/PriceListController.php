@@ -75,7 +75,10 @@ class PriceListController extends Controller
     public function destroy(PriceList $priceList): RedirectResponse
     {
         try {
-            DB::transaction(fn () => $priceList->delete());
+            DB::transaction(function () use ($priceList): void {
+                $priceList->items()->get()->each->delete();
+                $priceList->delete();
+            });
         } catch (QueryException $e) {
             if ($e->getCode() === '23503') {
                 return back()->with('error', 'No se puede eliminar: el registro está en uso');

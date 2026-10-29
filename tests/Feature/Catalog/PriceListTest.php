@@ -66,3 +66,33 @@ test('items export lists sku name price and is logged', function () {
     expect(file_get_contents($response->getFile()->getPathname()))->toContain('"SKU","Producto","Precio"')->toContain('"ABC-1","Cosa","10"')
         ->and(Activity::inLog('exports')->where('properties->table', 'price-list-items')->exists())->toBeTrue();
 });
+
+test('the default price list must be active', function () {
+    actingAsRole('owner');
+    $this->post(route('catalog.price-lists.store'), validPriceListPayload(['is_default' => 'on', 'is_active' => '0']))
+        ->assertSessionHasErrors(['is_default' => 'La lista predeterminada debe estar activa.']);
+});
+
+test('an inactive non default price list can be saved', function () {
+    actingAsRole('owner');
+    $this->post(route('catalog.price-lists.store'), validPriceListPayload(['is_default' => '0', 'is_active' => '0']))
+        ->assertSessionHasNoErrors()->assertRedirect();
+});
+
+test('deleting a price list logs each removed item', function () {
+    actingAsRole('owner');
+    $list = PriceList::factory()->create();
+    $item = PriceListItem::factory()->create(['price_list_id' => $list->id]);
+
+    $this->delete(route('catalog.price-lists.destroy', $list))->assertRedirect();
+    expect(Activity::query()->where('subject_type', $item->getMorphClass())->where('subject_id', $item->id)->where('event', 'deleted')->exists())->toBeTrue();
+});
+
+test('saving items without changes writes no items_updated row', function () {
+    actingAsRole('owner');
+    $list = PriceList::factory()->create();
+    $before = Activity::inLog('price_lists')->where('event', 'items_updated')->count();
+
+    $this->put(route('catalog.price-lists.items.update', $list), ['items' => []])->assertRedirect();
+    expect(Activity::inLog('price_lists')->where('event', 'items_updated')->count())->toBe($before);
+});

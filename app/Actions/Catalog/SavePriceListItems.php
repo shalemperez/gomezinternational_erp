@@ -34,7 +34,9 @@ class SavePriceListItems
                     $changed++;
                 }
             }
-            activity('price_lists')->performedOn($list)->event('items_updated')->withProperties(['changed' => $changed])->log("Precios actualizados ({$changed} cambios)");
+            if ($changed > 0) {
+                activity('price_lists')->performedOn($list)->event('items_updated')->withProperties(['changed' => $changed])->log("Precios actualizados ({$changed} cambios)");
+            }
 
             return $changed;
         });
