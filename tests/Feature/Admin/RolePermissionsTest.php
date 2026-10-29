@@ -49,3 +49,33 @@ test('a non super admin cannot grant permissions they lack', function () {
     $this->put(route('admin.roles.update', 'warehouse'), ['permissions' => ['catalog.products.create']])->assertForbidden();
     expect(Role::findByName('warehouse')->hasPermissionTo('catalog.products.create'))->toBeFalse();
 });
+
+test('a role that already holds a technical permission can still be edited by the owner', function () {
+    actingAsRole('owner');
+    Role::findByName('owner')->givePermissionTo('admin.users.impersonate');
+    $current = Role::findByName('sales')->permissions->pluck('name')->all();
+    Role::findByName('sales')->givePermissionTo('admin.users.impersonate');
+
+    $this->put(route('admin.roles.update', 'sales'), ['permissions' => [...$current, 'admin.users.impersonate', 'catalog.brands.create']])
+        ->assertRedirect(route('admin.roles.index'));
+    expect(Role::findByName('sales')->hasPermissionTo('admin.users.impersonate'))->toBeTrue()
+        ->and(Role::findByName('sales')->hasPermissionTo('catalog.brands.create'))->toBeTrue();
+});
+
+test('only a super admin can remove a technical permission', function () {
+    actingAsRole('owner');
+    Role::findByName('sales')->givePermissionTo('admin.users.impersonate');
+    $without = Role::findByName('sales')->permissions->pluck('name')->reject(fn ($p) => $p === 'admin.users.impersonate')->values()->all();
+
+    $this->put(route('admin.roles.update', 'sales'), ['permissions' => $without])->assertForbidden();
+    expect(Role::findByName('sales')->hasPermissionTo('admin.users.impersonate'))->toBeTrue();
+});
+
+test('saving without changes writes no audit row', function () {
+    actingAsRole('owner');
+    $current = Role::findByName('warehouse')->permissions->pluck('name')->all();
+    $before = Activity::inLog('roles')->count();
+
+    $this->put(route('admin.roles.update', 'warehouse'), ['permissions' => $current])->assertRedirect(route('admin.roles.index'));
+    expect(Activity::inLog('roles')->count())->toBe($before);
+});
