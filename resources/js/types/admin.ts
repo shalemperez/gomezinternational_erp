@@ -15,3 +15,4 @@ export type RoleWithPermissions = {
     permissions: string[];
 };
 export type PermissionOption = { name: string; label: string; module: string };
+export type SettingsValues = Record<string, string | null>;
