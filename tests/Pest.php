@@ -12,3 +12,4 @@ beforeEach(fn () => Http::preventStrayRequests());
 
 require __DIR__.'/Support/helpers.php';
 require __DIR__.'/Support/crud.php';
+require __DIR__.'/Support/spreadsheets.php';

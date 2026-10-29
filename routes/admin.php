@@ -5,6 +5,7 @@ use App\Http\Controllers\Admin\ImpersonateController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
+use App\Http\Controllers\DataImport\ImportController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () {
@@ -17,4 +18,12 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
     Route::get('activity-log/export', [ActivityLogController::class, 'export'])->name('activity-log.export');
     Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log.index');
+    Route::middleware('permission:catalog.clients.import|catalog.suppliers.import|catalog.products.import|catalog.price-lists.import')->group(function () {
+        Route::get('imports', [ImportController::class, 'index'])->name('imports.index');
+        Route::get('imports/{type}/template', [ImportController::class, 'template'])->name('imports.template');
+        Route::post('imports/{type}', [ImportController::class, 'preview'])->name('imports.preview');
+        Route::get('imports/batches/{batch}', [ImportController::class, 'show'])->name('imports.show');
+        Route::post('imports/batches/{batch}/confirm', [ImportController::class, 'confirm'])->name('imports.confirm');
+        Route::delete('imports/batches/{batch}', [ImportController::class, 'cancel'])->name('imports.cancel');
+    });
 });
