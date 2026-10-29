@@ -14,6 +14,7 @@ class ImpersonateController extends Controller
     #[Middleware('permission:admin.users.impersonate')]
     public function start(Request $request, User $user): RedirectResponse
     {
+        abort_if($request->session()->has('impersonator_id'), 403, 'Ya estás en modo de suplantación.');
         $actor = $request->user();
         abort_if($user->is($actor), 403, 'No puedes entrar como tú mismo.');
         abort_if(! $user->is_active, 403, 'El usuario está desactivado.');
@@ -34,6 +35,15 @@ class ImpersonateController extends Controller
             return redirect()->route('dashboard');
         }
         $impersonator = User::query()->whereKey($impersonatorId)->firstOrFail();
+        if (! $impersonator->is_active) {
+            $request->session()->forget('impersonator_id');
+            activity('auth')->causedBy($impersonator)->performedOn($request->user())->event('impersonation_stopped')->log('Suplantación terminada: la cuenta original está desactivada');
+            Auth::guard('web')->logout();
+            $request->session()->invalidate();
+            $request->session()->regenerateToken();
+
+            return redirect()->route('login')->with('error', 'Tu cuenta está desactivada. Contacta a un administrador.');
+        }
         $impersonated = $request->user();
         $request->session()->forget('impersonator_id');
         activity('auth')->causedBy($impersonator)->performedOn($impersonated)->event('impersonation_stopped')->log("Salió del modo de suplantación de {$impersonated->name}");

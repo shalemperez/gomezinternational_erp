@@ -101,3 +101,35 @@ test('edit page includes the record history', function () {
     $target = User::factory()->create();
     $this->get(route('admin.users.edit', $target))->assertOk()->assertInertia(fn ($p) => $p->component('admin/users/form')->has('history')->has('user'));
 });
+
+test('a non super admin cannot grant a role with permissions they lack', function () {
+    $manager = actingAsRole('management');
+    $manager->givePermissionTo(['admin.users.view', 'admin.users.update']);
+    $target = User::factory()->create();
+    $target->assignRole('sales');
+
+    $this->put(route('admin.users.update', $target), validUserPayload(['name' => $target->name, 'email' => $target->email, 'roles' => ['owner'], 'is_active' => true]))
+        ->assertForbidden();
+    expect($target->fresh()->hasRole('owner'))->toBeFalse();
+
+    $this->put(route('admin.users.update', $manager), validUserPayload(['name' => $manager->name, 'email' => $manager->email, 'roles' => ['management', 'owner'], 'is_active' => true]))
+        ->assertForbidden();
+    expect($manager->fresh()->hasRole('owner'))->toBeFalse();
+});
+
+test('owner can still assign operational roles', function () {
+    actingAsRole('owner');
+    $target = User::factory()->create();
+
+    $this->put(route('admin.users.update', $target), validUserPayload(['name' => $target->name, 'email' => $target->email, 'roles' => ['sales', 'warehouse']]))
+        ->assertRedirect(route('admin.users.index'));
+    expect($target->fresh()->getRoleNames()->sort()->values()->all())->toBe(['sales', 'warehouse']);
+});
+
+test('the form only offers roles the actor can assign', function () {
+    $manager = actingAsRole('management');
+    $manager->givePermissionTo(['admin.users.view', 'admin.users.create']);
+
+    $this->get(route('admin.users.create'))->assertOk()->assertInertia(fn ($p) => $p
+        ->where('roleOptions', fn ($options) => collect($options)->pluck('name')->doesntContain('owner') && collect($options)->pluck('name')->doesntContain('super-admin')));
+});

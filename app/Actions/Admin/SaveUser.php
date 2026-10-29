@@ -7,6 +7,7 @@ use App\Notifications\UserInvited;
 use App\Support\PermissionCatalog;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
+use Spatie\Permission\Models\Role;
 
 class SaveUser
 {
@@ -19,6 +20,17 @@ class SaveUser
 
         if ($wantsSuperAdmin && ! $actor->isSuperAdmin()) {
             throw new AuthorizationException('Solo un Super Admin puede asignar el rol Super Admin.');
+        }
+        if (! $actor->isSuperAdmin()) {
+            $currentRoles = $user?->getRoleNames()->all() ?? [];
+            $addedRoles = array_values(array_diff($roles, $currentRoles));
+            $actorPermissions = $actor->getAllPermissions()->pluck('name')->all();
+            foreach ($addedRoles as $roleName) {
+                $rolePermissions = Role::findByName($roleName, 'web')->permissions->pluck('name')->all();
+                if (array_diff($rolePermissions, $actorPermissions) !== []) {
+                    throw new AuthorizationException('No puedes asignar un rol con permisos que tú no tienes.');
+                }
+            }
         }
         if ($user !== null) {
             if ($user->isSuperAdmin() && ! $actor->isSuperAdmin()) {

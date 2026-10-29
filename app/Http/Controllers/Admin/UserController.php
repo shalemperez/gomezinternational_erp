@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Middleware;
 use Inertia\Inertia;
 use Inertia\Response;
+use Spatie\Permission\Models\Role;
 
 class UserController extends Controller
 {
@@ -47,7 +48,7 @@ class UserController extends Controller
     public function create(Request $request): Response
     {
         return Inertia::render('admin/users/form', [
-            'roleOptions' => $this->roleOptions(! $request->user()->isSuperAdmin()),
+            'roleOptions' => $this->assignableRoleOptions($request->user()),
             'authId' => $request->user()->id,
         ]);
     }
@@ -68,7 +69,7 @@ class UserController extends Controller
         return Inertia::render('admin/users/form', [
             'user' => [...$user->only(['id', 'name', 'email', 'is_active']), 'roles' => $user->getRoleNames()->all()],
             'history' => AuditHistory::for($user),
-            'roleOptions' => $this->roleOptions(! $request->user()->isSuperAdmin()),
+            'roleOptions' => $this->assignableRoleOptions($request->user()),
             'authId' => $request->user()->id,
         ]);
     }
@@ -89,6 +90,22 @@ class UserController extends Controller
         return collect(PermissionCatalog::ROLES)
             ->reject(fn (string $label, string $name) => $hideSuperAdmin && $name === PermissionCatalog::SUPER_ADMIN)
             ->map(fn (string $label, string $name) => ['name' => $name, 'label' => $label])
+            ->values()->all();
+    }
+
+    /** @return array<int, array{name: string, label: string}> */
+    private function assignableRoleOptions(User $actor): array
+    {
+        if ($actor->isSuperAdmin()) {
+            return $this->roleOptions(false);
+        }
+        $actorPermissions = $actor->getAllPermissions()->pluck('name')->all();
+
+        return collect($this->roleOptions(true))
+            ->filter(fn (array $option): bool => array_diff(
+                Role::findByName($option['name'], 'web')->permissions->pluck('name')->all(),
+                $actorPermissions,
+            ) === [])
             ->values()->all();
     }
 }

@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { index, store, update } from '@/routes/admin/users';
+import { create, edit, index, store, update } from '@/routes/admin/users';
 import type { AdminUserForm, RoleOption } from '@/types/admin';
 import type { AuditEntry } from '@/types/audit';
 
@@ -154,7 +154,7 @@ AdminUserForm.layout = (props: Props) => ({
         { title: 'Usuarios', href: index() },
         {
             title: props.user ? 'Editar usuario' : 'Invitar usuario',
-            href: props.user ? update.url(props.user.id) : store.url(),
+            href: props.user ? edit.url(props.user.id) : create.url(),
         },
     ],
 });

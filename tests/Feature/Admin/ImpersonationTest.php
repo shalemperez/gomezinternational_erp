@@ -38,3 +38,37 @@ test('stop without an active impersonation redirects to dashboard', function () 
     actingAsRole('owner');
     $this->delete(route('admin.impersonate.stop'))->assertRedirect(route('dashboard'));
 });
+
+test('cannot start a nested impersonation', function () {
+    $admin = actingAsRole('super-admin');
+    $target = User::factory()->create();
+    $other = User::factory()->create();
+
+    $this->post(route('admin.users.impersonate', $target))->assertRedirect(route('dashboard'));
+    $target->givePermissionTo('admin.users.impersonate');
+    $this->post(route('admin.users.impersonate', $other))->assertForbidden();
+    expect(session('impersonator_id'))->toBe($admin->id);
+});
+
+test('stopping impersonation logs out when the original account was deactivated', function () {
+    $admin = actingAsRole('super-admin');
+    $target = User::factory()->create();
+    $this->post(route('admin.users.impersonate', $target));
+    $admin->forceFill(['is_active' => false])->save();
+
+    $this->delete(route('admin.impersonate.stop'))->assertRedirect(route('login'))
+        ->assertSessionHas('error', 'Tu cuenta está desactivada. Contacta a un administrador.');
+    $this->assertGuest();
+});
+
+test('activity recorded while impersonating carries the impersonator id', function () {
+    $admin = actingAsRole('super-admin');
+    $target = User::factory()->create();
+    $this->post(route('admin.users.impersonate', $target));
+
+    $this->get(route('dashboard'))->assertOk();
+    $target->forceFill(['name' => 'Cambio durante suplantación'])->save();
+
+    $row = Activity::query()->where('subject_id', $target->id)->where('event', 'updated')->latest('id')->firstOrFail();
+    expect($row->impersonator_id)->toBe($admin->id);
+});
