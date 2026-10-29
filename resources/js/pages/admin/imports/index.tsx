@@ -1,5 +1,6 @@
 import { Form, Head, Link } from '@inertiajs/react';
 import InputError from '@/components/input-error';
+import { FormField } from '@/components/erp/form-field';
 import { PageHeader } from '@/components/erp/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,13 @@ import {
     CardHeader,
     CardTitle,
 } from '@/components/ui/card';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import {
     Table,
     TableBody,
@@ -70,6 +78,44 @@ export default function ImportsIndex({ importers, batches }: Props) {
                                 >
                                     {({ errors, processing }) => (
                                         <>
+                                            {importer.meta.price_lists && (
+                                                <FormField
+                                                    label="Lista de precios"
+                                                    htmlFor="price_list_id"
+                                                    error={errors.price_list_id}
+                                                    required
+                                                >
+                                                    <Select
+                                                        name="price_list_id"
+                                                        required
+                                                    >
+                                                        <SelectTrigger
+                                                            id="price_list_id"
+                                                            className="w-full"
+                                                        >
+                                                            <SelectValue placeholder="Seleccione una lista" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {importer.meta.price_lists.map(
+                                                                (priceList) => (
+                                                                    <SelectItem
+                                                                        key={
+                                                                            priceList.id
+                                                                        }
+                                                                        value={String(
+                                                                            priceList.id,
+                                                                        )}
+                                                                    >
+                                                                        {
+                                                                            priceList.name
+                                                                        }
+                                                                    </SelectItem>
+                                                                ),
+                                                            )}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormField>
+                                            )}
                                             <input
                                                 type="file"
                                                 name="file"

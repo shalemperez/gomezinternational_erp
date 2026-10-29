@@ -7,7 +7,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 final class ImporterRegistry
 {
     /** @var list<class-string<BaseImporter>> */
-    private const IMPORTERS = [ClientsImporter::class];
+    private const IMPORTERS = [ClientsImporter::class, SuppliersImporter::class, ProductsImporter::class, PriceListItemsImporter::class];
 
     /** @return array<string, BaseImporter> */
     public static function all(): array
