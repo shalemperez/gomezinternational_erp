@@ -66,6 +66,10 @@ class WarehouseController extends Controller
     #[Middleware('permission:inventory.warehouses.manage')]
     public function destroy(Warehouse $warehouse): RedirectResponse
     {
+        if ($warehouse->is_default) {
+            return back()->with('error', 'No se puede eliminar el almacén predeterminado.');
+        }
+
         try {
             DB::transaction(fn () => $warehouse->delete());
         } catch (QueryException $e) {
@@ -78,7 +82,7 @@ class WarehouseController extends Controller
         return redirect()->route('inventory.warehouses.index')->with('success', 'Almacén eliminado');
     }
 
-    #[Middleware('permission:inventory.warehouses.view')]
+    #[Middleware('permission:inventory.warehouses.export')]
     public function export(Request $request): BinaryFileResponse
     {
         $query = TableQuery::applyFilters(Warehouse::query(), $request, ['code', 'name'], ['code', 'name', 'is_default', 'is_active'], 'code', 'asc');

@@ -30,3 +30,29 @@ test('seeder creates the principal warehouse', function () {
     (new WarehouseSeeder)->run();
     expect(Warehouse::count())->toBe(1)->and(Warehouse::default()->code)->toBe('PRINCIPAL');
 });
+
+test('warehouse role cannot export warehouses', function () {
+    actingAsRole('warehouse');
+    $this->get(route('inventory.warehouses.export', ['format' => 'csv']))->assertForbidden();
+});
+
+test('the default warehouse cannot be deleted', function () {
+    actingAsRole('owner');
+    $w = Warehouse::factory()->create(['is_default' => true]);
+    $this->delete(route('inventory.warehouses.destroy', $w))->assertSessionHas('error', 'No se puede eliminar el almacén predeterminado.');
+    expect(Warehouse::query()->whereKey($w->id)->exists())->toBeTrue();
+});
+
+test('the default flag cannot be removed by editing the default warehouse', function () {
+    actingAsRole('owner');
+    $w = Warehouse::factory()->create(['is_default' => true]);
+    $this->put(route('inventory.warehouses.update', $w), validWarehousePayload(['code' => $w->code, 'is_default' => '']))
+        ->assertSessionHasErrors(['is_default' => 'Debe existir un almacén predeterminado: marca otro almacén como predeterminado.']);
+});
+
+test('a non default warehouse can be deactivated', function () {
+    actingAsRole('owner');
+    $w = Warehouse::factory()->create(['is_default' => false]);
+    $this->put(route('inventory.warehouses.update', $w), validWarehousePayload(['code' => $w->code, 'is_default' => '', 'is_active' => '']))->assertRedirect();
+    expect($w->fresh()->is_active)->toBeFalse();
+});

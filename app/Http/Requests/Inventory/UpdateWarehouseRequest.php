@@ -27,6 +27,9 @@ class UpdateWarehouseRequest extends StoreWarehouseRequest
             if ($warehouse instanceof Warehouse && $warehouse->is_default && ! $this->boolean('is_active')) {
                 $validator->errors()->add('is_active', 'El almacén predeterminado no se puede desactivar.');
             }
+            if ($warehouse instanceof Warehouse && $warehouse->is_default && ! $this->boolean('is_default')) {
+                $validator->errors()->add('is_default', 'Debe existir un almacén predeterminado: marca otro almacén como predeterminado.');
+            }
         });
     }
 }

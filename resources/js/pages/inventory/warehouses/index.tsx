@@ -53,7 +53,7 @@ export default function WarehouseIndex({ rows, filters }: Props) {
                     title="Almacenes"
                     actions={
                         <>
-                            {can('inventory.warehouses.view') && (
+                            {can('inventory.warehouses.export') && (
                                 <ExportMenu
                                     xlsxUrl={exportMethod.url({
                                         query: { ...filters, format: 'xlsx' },
@@ -86,13 +86,14 @@ export default function WarehouseIndex({ rows, filters }: Props) {
                                     <Link href={edit(row.id)}>Editar</Link>
                                 </Button>
                             )}
-                            {can('inventory.warehouses.manage') && (
-                                <ConfirmDelete
-                                    url={destroy.url(row.id)}
-                                    title="Eliminar almacén"
-                                    description="Esta acción no se puede deshacer."
-                                />
-                            )}
+                            {can('inventory.warehouses.manage') &&
+                                !row.is_default && (
+                                    <ConfirmDelete
+                                        url={destroy.url(row.id)}
+                                        title="Eliminar almacén"
+                                        description="Esta acción no se puede deshacer."
+                                    />
+                                )}
                         </div>
                     )}
                 />

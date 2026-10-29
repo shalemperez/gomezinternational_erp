@@ -90,6 +90,7 @@ final class PermissionCatalog
         // inventory (phase 1 subset)
         $add('inventory.warehouses.view', 'Ver almacenes', [...$all, 'warehouse']);
         $add('inventory.warehouses.manage', 'Administrar almacenes', ['owner', 'management']);
+        $add('inventory.warehouses.export', 'Exportar almacenes', array_values(array_intersect([...$all, 'warehouse'], self::EXPORTERS)));
 
         return $p;
     }
