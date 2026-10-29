@@ -45,3 +45,13 @@ function validUnitPayload(array $over = []): array
 {
     return array_merge(['code' => 'DOC', 'name' => 'Docena', 'is_active' => 'on'], $over);
 }
+
+function validAdditionalTaxPayload(array $over = []): array
+{
+    return array_merge(['code' => 'ISC-ADV', 'name' => 'ISC ad valorem', 'calculation_type' => 'percent_of_base', 'rate' => '10', 'amount' => '', 'included_in_itbis_base' => 'on', 'dgii_code' => '', 'is_active' => 'on'], $over);
+}
+
+function validSalespersonPayload(array $over = []): array
+{
+    return array_merge(['code' => 'VEN-01', 'name' => 'Carlos Vendedor', 'email' => 'carlos@empresa.test', 'phone' => '809-555-0101', 'user_id' => '', 'is_active' => 'on'], $over);
+}
