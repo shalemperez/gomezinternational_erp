@@ -54,19 +54,19 @@ final class Decimal
     }
 
     /** @param int<0, max> $scale */
-    public static function mul(string|BigDecimal|float $a, string|BigDecimal|float $b, int $scale): string
+    public static function mul(string|int|BigDecimal|float $a, string|int|BigDecimal|float $b, int $scale): string
     {
         return self::scale(self::of($a)->multipliedBy(self::of($b)), $scale);
     }
 
     /** @param int<0, max> $scale */
-    public static function div(string|BigDecimal|float $a, string|BigDecimal|float $b, int $scale): string
+    public static function div(string|int|BigDecimal|float $a, string|int|BigDecimal|float $b, int $scale): string
     {
         return (string) self::of($a)->dividedBy(self::of($b), $scale, RoundingMode::HalfUp);
     }
 
     /** @param int<0, max> $scale */
-    public static function percent(string|BigDecimal|float $base, string|BigDecimal|float $pct, int $scale = self::MONEY): string
+    public static function percent(string|int|BigDecimal|float $base, string|int|BigDecimal|float $pct, int $scale = self::MONEY): string
     {
         return (string) self::of($base)->multipliedBy(self::of($pct))->dividedBy(100, $scale, RoundingMode::HalfUp);
     }
@@ -85,12 +85,12 @@ final class Decimal
         return self::scale($total, $scale);
     }
 
-    public static function isZero(string|BigDecimal|float $value): bool
+    public static function isZero(string|int|BigDecimal|float $value): bool
     {
         return self::of($value)->isZero();
     }
 
-    public static function cmp(string|BigDecimal|float $a, string|BigDecimal|float $b): int
+    public static function cmp(string|int|BigDecimal|float $a, string|int|BigDecimal|float $b): int
     {
         return self::of($a)->compareTo(self::of($b));
     }

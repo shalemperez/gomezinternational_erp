@@ -67,3 +67,13 @@ test('half up rounding at boundaries and for negatives', function () {
 test('division by zero throws', function () {
     expect(fn () => Decimal::div('1', '0', 2))->toThrow(DivisionByZeroException::class);
 });
+
+test('int arguments are accepted by every entry point', function () {
+    expect(Decimal::money(5))->toBe('5.00')
+        ->and(Decimal::mul(5, '2', 2))->toBe('10.00')
+        ->and(Decimal::div(1, 4, 2))->toBe('0.25')
+        ->and(Decimal::percent(200, 18, 2))->toBe('36.00')
+        ->and(Decimal::cmp(0, '1'))->toBe(-1)
+        ->and(Decimal::isZero(0))->toBeTrue()
+        ->and(Decimal::sum([1, '2', 3]))->toBe('6.00');
+});
