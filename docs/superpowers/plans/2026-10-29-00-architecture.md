@@ -298,7 +298,7 @@ MCP tools available to executors (names as Boost registers them): `application-i
 4. **After frontend changes that affect a page** → `browser-logs` (when a browser session exists) to catch console errors.
 5. **To verify data** (seeders, imports) → `database-query` with the exact SELECT the task gives.
 6. Never call `record-rule` unless the task says so (rules are curated by the planner).
-7. Follow the Boost guidelines block in `CLAUDE.md` and the `inertia-react-development`, `pest-testing`, `tailwindcss-development`, `wayfinder-development` skills when they do not conflict with the task; the task wins on conflict.
+7. Follow the Boost guidelines block in `CLAUDE.md` and the `inertia-react-development`, `testing-best-practices`, `laravel-best-practices`, `tailwindcss-development`, `wayfinder-development` skills when they do not conflict with the task; the task wins on conflict.
 
 ---
 
