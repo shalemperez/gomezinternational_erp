@@ -22,3 +22,8 @@ function validUserPayload(array $over = []): array
         'roles' => ['sales'],
     ], $over);
 }
+
+function validCurrencyPayload(array $over = []): array
+{
+    return array_merge(['code' => 'EUR', 'name' => 'Euro', 'symbol' => '€', 'decimal_places' => 2, 'is_active' => 'on'], $over);
+}
