@@ -10,6 +10,8 @@ use App\Support\TableQuery;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Middleware;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
@@ -26,8 +28,8 @@ class ActivityLogController extends Controller
             'rows' => $rows,
             'filters' => $request->only(['search', 'sort', 'dir', 'per_page', 'causer_id', 'log_name', 'subject_type', 'subject_id', 'event', 'date_from', 'date_to']),
             'users' => User::query()->orderBy('name')->get(['id', 'name']),
-            'logNames' => ActivityLog::query()->whereNotNull('log_name')->distinct()->orderBy('log_name')->pluck('log_name'),
-            'events' => ActivityLog::query()->whereNotNull('event')->distinct()->orderBy('event')->pluck('event'),
+            'logNames' => Cache::remember('activity-log:log-names', 300, fn () => ActivityLog::query()->whereNotNull('log_name')->distinct()->orderBy('log_name')->pluck('log_name')->all()),
+            'events' => Cache::remember('activity-log:events', 300, fn () => ActivityLog::query()->whereNotNull('event')->distinct()->orderBy('event')->pluck('event')->all()),
         ]);
     }
 
@@ -55,30 +57,35 @@ class ActivityLogController extends Controller
     private function filtered(Request $request): Builder
     {
         $query = ActivityLog::query()->with(['causer:id,name', 'impersonator:id,name']);
-        if ($id = $request->query('causer_id')) {
-            $query->where('causer_id', $id);
+        $causerId = $request->string('causer_id')->toString();
+        if (ctype_digit($causerId)) {
+            $query->where('causer_id', (int) $causerId);
         }
-        if ($log = $request->query('log_name')) {
+        if (($log = $request->string('log_name')->toString()) !== '') {
             $query->where('log_name', $log);
         }
-        if ($event = $request->query('event')) {
+        if (($event = $request->string('event')->toString()) !== '') {
             $query->where('event', $event);
         }
-        $type = $request->string('subject_type')->toString();
+        $type = trim($request->string('subject_type')->toString(), '\\ ');
         if ($type !== '') {
-            $query->where('subject_type', 'ILIKE', '%\\'.ltrim($type, '\\'));
+            // exact match on the morph class: short name ("Client") or full class name
+            $query->where(fn (Builder $q) => $q->where('subject_type', $type)->orWhere('subject_type', 'App\\Models\\'.$type));
         }
-        if ($subjectId = $request->query('subject_id')) {
-            $query->where('subject_id', $subjectId);
+        $subjectId = $request->string('subject_id')->toString();
+        if (ctype_digit($subjectId)) {
+            $query->where('subject_id', (int) $subjectId);
         }
-        if ($from = $request->query('date_from')) {
-            $query->whereDate('created_at', '>=', $from);
+        $from = $request->string('date_from')->toString();
+        if ($from !== '' && Carbon::canBeCreatedFromFormat($from, 'Y-m-d')) {
+            $query->where('created_at', '>=', Carbon::createFromFormat('Y-m-d', $from)->startOfDay());
         }
-        if ($to = $request->query('date_to')) {
-            $query->whereDate('created_at', '<=', $to);
+        $to = $request->string('date_to')->toString();
+        if ($to !== '' && Carbon::canBeCreatedFromFormat($to, 'Y-m-d')) {
+            $query->where('created_at', '<', Carbon::createFromFormat('Y-m-d', $to)->addDay()->startOfDay());
         }
         if (($search = $request->string('search')->trim()->toString()) !== '') {
-            $query->where('description', 'ILIKE', '%'.$search.'%');
+            $query->where('description', 'ILIKE', '%'.addcslashes($search, '\\%_').'%');
         }
 
         return $query;

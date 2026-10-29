@@ -1,8 +1,9 @@
 <?php
 
-use App\Models\ActivityLog;
+use App\Models\AdditionalTax;
 use App\Models\Brand;
 use App\Models\User;
+use Illuminate\Support\Carbon;
 use Spatie\Activitylog\Models\Activity;
 
 test('index requires permission', function () {
@@ -50,8 +51,21 @@ test('export downloads csv and is itself logged', function () {
 
 test('date range filter', function () {
     actingAsRole('owner');
-    Brand::factory()->create();
-    $this->get(route('admin.activity-log.index', ['date_from' => now()->addDay()->toDateString()]))->assertInertia(fn ($p) => $p->where('rows.total', 0));
-    $todayTotal = ActivityLog::query()->whereDate('created_at', now()->toDateString())->count();
-    $this->get(route('admin.activity-log.index', ['date_from' => now()->toDateString(), 'date_to' => now()->toDateString()]))->assertInertia(fn ($p) => $p->where('rows.total', $todayTotal));
+    Carbon::setTestNow('2025-01-15 10:00:00');
+    activity('test')->log('enero');
+    Carbon::setTestNow();
+
+    $this->get(route('admin.activity-log.index', ['date_from' => '2025-01-15', 'date_to' => '2025-01-15']))->assertInertia(fn ($p) => $p->where('rows.total', 1));
+    $this->get(route('admin.activity-log.index', ['date_from' => '2025-01-16', 'date_to' => '2025-01-20']))->assertInertia(fn ($p) => $p->where('rows.total', 0));
+    $this->get(route('admin.activity-log.index', ['date_from' => 'basura', 'causer_id' => 'abc', 'subject_id' => 'x']))->assertOk();
+});
+
+test('subject type filter matches the class exactly and tolerates odd input', function () {
+    actingAsRole('owner');
+    AdditionalTax::factory()->create();
+
+    $this->get(route('admin.activity-log.index', ['subject_type' => 'Tax']))->assertInertia(fn ($p) => $p->where('rows.total', 0));
+    $this->get(route('admin.activity-log.index', ['subject_type' => 'AdditionalTax']))->assertInertia(fn ($p) => $p->where('rows.total', fn ($t) => $t >= 1));
+    $this->get(route('admin.activity-log.index', ['subject_type' => 'Brand\\']))->assertOk();
+    $this->get(route('admin.activity-log.index', ['search' => '100%_\\']))->assertOk();
 });

@@ -187,6 +187,11 @@ export default function ActivityLogIndex({
                                         )}
                                     </pre>
                                 )}
+                                {row.impersonator && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Suplantado por {row.impersonator.name}
+                                    </p>
+                                )}
                                 <p className="text-xs text-muted-foreground">
                                     IP {show(row.ip)} · Request{' '}
                                     {show(row.request_id)}
@@ -282,6 +287,9 @@ export default function ActivityLogIndex({
                                     )
                                 }
                             />
+                            <span className="text-sm text-muted-foreground">
+                                Desde
+                            </span>
                             <Input
                                 type="date"
                                 className="w-40"
@@ -294,6 +302,9 @@ export default function ActivityLogIndex({
                                     )
                                 }
                             />
+                            <span className="text-sm text-muted-foreground">
+                                Hasta
+                            </span>
                             <Input
                                 type="date"
                                 className="w-40"
