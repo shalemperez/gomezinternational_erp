@@ -77,7 +77,7 @@ export default function ReceiptShow({
         { label: 'Cliente', value: receipt.client?.business_name ?? '' },
         { label: 'Fecha', value: formatDate(receipt.receipt_date) },
         { label: 'Método', value: receipt.payment_method_label },
-        { label: 'Cuenta', value: receipt.financialAccount?.name ?? '' },
+        { label: 'Cuenta', value: receipt.financial_account?.name ?? '' },
         { label: 'Referencia', value: receipt.reference ?? '' },
         { label: 'Moneda', value: receipt.currency?.code ?? '' },
         {

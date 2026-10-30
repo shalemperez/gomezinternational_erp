@@ -113,6 +113,6 @@ test('permissions and scoping: sales can view own receipts but not create or can
     $this->get(route('sales.receipts.index'))->assertInertia(fn ($p) => $p->has('rows.data', 0));
     actingAsRole('management');
     $this->get(route('sales.receipts.index'))->assertInertia(fn ($p) => $p->component('sales/receipts/index')->has('rows.data', 1));
-    $this->get(route('sales.receipts.show', $r))->assertInertia(fn ($p) => $p->component('sales/receipts/show')->has('receipt.applications', 1)->has('history'));
+    $this->get(route('sales.receipts.show', $r))->assertInertia(fn ($p) => $p->component('sales/receipts/show')->has('receipt.applications', 1)->where('receipt.financial_account.name', $r->financialAccount->name)->has('history'));
     $this->get(route('sales.receipts.export', ['format' => 'csv']))->assertOk();
 });

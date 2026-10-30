@@ -131,6 +131,9 @@ export default function ReceiptForm({
     const currencyInvoices = openInvoices.filter(
         (invoice) => invoice.currency_id === data.currency_id,
     );
+    const currencyInvoiceIds = new Set(
+        currencyInvoices.map((invoice) => invoice.id),
+    );
     const currencyAdvances = advances.filter(
         (advance) => advance.currency_id === data.currency_id,
     );
@@ -146,7 +149,9 @@ export default function ReceiptForm({
         ]),
     );
     const selectedApplications = data.applications.filter(
-        (application) => application.selected,
+        (application) =>
+            application.selected &&
+            currencyInvoiceIds.has(application.invoice_id),
     );
     const appliedTotal = selectedApplications.reduce(
         (sum, application) => sum + Number(application.amount || 0),
@@ -196,7 +201,11 @@ export default function ReceiptForm({
         transform((current) => ({
             ...current,
             applications: current.applications
-                .filter((application) => application.selected)
+                .filter(
+                    (application) =>
+                        application.selected &&
+                        currencyInvoiceIds.has(application.invoice_id),
+                )
                 .map(({ invoice_id, amount }) => ({ invoice_id, amount })),
         }));
         post(store.url());

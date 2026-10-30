@@ -322,7 +322,7 @@ export type Receipt = {
     client?: { id: number; business_name: string } | null;
     salesperson?: { id: number; name: string } | null;
     currency?: { id: number; code: string } | null;
-    financialAccount?: { id: number; name: string } | null;
+    financial_account?: { id: number; name: string } | null;
     canceller?: { id: number; name: string } | null;
     applications?: ReceiptApplication[];
 };
