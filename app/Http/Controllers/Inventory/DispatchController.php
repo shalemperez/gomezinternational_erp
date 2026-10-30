@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Inventory;
 use App\Actions\Inventory\ConfirmDispatch;
 use App\Actions\Inventory\SaveDispatch;
 use App\Enums\DispatchStatus;
+use App\Enums\InvoiceStatus;
 use App\Exports\TableExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Inventory\StoreDispatchRequest;
@@ -56,6 +57,9 @@ class DispatchController extends Controller
         $invoice = $invoiceId > 0 ? $this->loadInvoice($invoiceId) : null;
         if ($invoice === null) {
             return redirect()->route('sales.invoices.index')->with('error', 'Selecciona la factura a la que aplica el conduce');
+        }
+        if (! in_array($invoice->status, [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid, InvoiceStatus::Paid], true)) {
+            return redirect()->route('sales.invoices.show', $invoice)->with('error', 'La factura debe estar emitida.');
         }
 
         return Inertia::render('inventory/dispatches/form', [

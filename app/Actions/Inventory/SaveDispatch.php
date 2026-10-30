@@ -18,7 +18,7 @@ class SaveDispatch
     public function handle(array $data, Invoice $invoice, User $actor, ?Dispatch $dispatch = null): Dispatch
     {
         return DB::transaction(function () use ($data, $invoice, $actor, $dispatch): Dispatch {
-            $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->with('lines')->firstOrFail();
+            $invoice = Invoice::query()->whereKey($dispatch !== null ? $dispatch->invoice_id : $invoice->id)->lockForUpdate()->with('lines')->firstOrFail();
             $rows = array_values(array_filter($data['lines'], fn (array $row) => Decimal::cmp((string) $row['quantity'], '0') > 0));
             $requestedByLine = [];
             foreach ($rows as $row) {

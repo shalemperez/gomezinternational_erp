@@ -27,12 +27,13 @@ class ConfirmDispatch
     public function handle(Dispatch $dispatch, User $actor): Dispatch
     {
         return DB::transaction(function () use ($dispatch, $actor): Dispatch {
+            $invoiceId = Dispatch::query()->whereKey($dispatch->id)->value('invoice_id');
+            $invoice = Invoice::query()->whereKey($invoiceId)->lockForUpdate()->with('lines')->firstOrFail();
             $dispatch = Dispatch::query()->whereKey($dispatch->id)->lockForUpdate()->with(['lines.product'])->firstOrFail();
             if ($dispatch->status !== DispatchStatus::Draft) {
                 throw new DocumentStateException("El conduce está {$dispatch->status->label()} y no admite esta acción");
             }
 
-            $invoice = Invoice::query()->whereKey($dispatch->invoice_id)->lockForUpdate()->with('lines')->firstOrFail();
             if (! in_array($invoice->status, [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid, InvoiceStatus::Paid], true)) {
                 throw new DocumentStateException('Solo se despachan facturas emitidas');
             }

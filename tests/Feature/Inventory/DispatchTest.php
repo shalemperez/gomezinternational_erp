@@ -106,3 +106,29 @@ test('permissions, drafts, pdf, index and export', function () {
     actingAsRole('owner');
     $this->get(route('inventory.dispatches.export', ['format' => 'csv']))->assertOk();
 });
+
+test('dispatch history hides costs from users without the cost permission', function () {
+    actingAsRole('warehouse');
+    $i = issuedInvoice();
+    $line = $i->lines->first();
+    $this->post(route('inventory.dispatches.store'), validDispatchPayload($i, ['lines' => [['invoice_line_id' => $line->id, 'quantity' => '1', 'lot_id' => '']]]));
+    $d = Dispatch::firstOrFail();
+    $this->post(route('inventory.dispatches.confirm', $d));
+
+    $response = $this->get(route('inventory.dispatches.show', $d))->assertOk();
+    $history = $response->viewData('page')['props']['history'];
+    expect(json_encode($history))->not->toContain('total_cost')->not->toContain('unit_cost');
+});
+
+test('dispatch history exposes costs to owner', function () {
+    actingAsRole('owner');
+    $i = issuedInvoice();
+    $line = $i->lines->first();
+    $this->post(route('inventory.dispatches.store'), validDispatchPayload($i, ['lines' => [['invoice_line_id' => $line->id, 'quantity' => '1', 'lot_id' => '']]]));
+    $d = Dispatch::firstOrFail();
+    $this->post(route('inventory.dispatches.confirm', $d));
+
+    $response = $this->get(route('inventory.dispatches.show', $d))->assertOk();
+    $history = $response->viewData('page')['props']['history'];
+    expect(json_encode($history))->toContain('total_cost');
+});
