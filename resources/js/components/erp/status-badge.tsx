@@ -13,6 +13,7 @@ const variants: Record<
     confirmed: 'default',
     posted: 'default',
     paid: 'default',
+    ok: 'default',
     invoiced: 'default',
     rejected: 'destructive',
     expired: 'destructive',

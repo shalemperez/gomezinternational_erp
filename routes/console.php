@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\CheckNcfSequences;
+use App\Jobs\CheckStockAlerts;
 use App\Jobs\ExpireProformas;
 use App\Jobs\FetchDailyExchangeRates;
 use App\Services\Settings;
@@ -17,5 +18,7 @@ Schedule::job(new FetchDailyExchangeRates)
     ->when(fn () => app(Settings::class)->get('exchange_rates.source', 'manual') !== 'manual');
 
 Schedule::job(new CheckNcfSequences)->dailyAt('07:30');
+
+Schedule::job(new CheckStockAlerts)->dailyAt('07:35');
 
 Schedule::job(new ExpireProformas)->dailyAt('00:10');

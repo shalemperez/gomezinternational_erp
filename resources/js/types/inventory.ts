@@ -97,3 +97,49 @@ export type DispatchDetail = Omit<
         total_cost?: string;
     }[];
 };
+
+export type StockRow = {
+    id: number;
+    sku: string;
+    name: string;
+    warehouse: string;
+    quantity: string;
+    reserved_quantity: string;
+    available: string;
+    minimum_stock: string;
+    is_low: boolean;
+    average_cost?: string;
+    stock_value?: string;
+};
+
+export type StockMovementRow = {
+    id: number;
+    moved_at: string | null;
+    type: string;
+    type_label: string;
+    sku: string | null;
+    name: string | null;
+    warehouse: string | null;
+    lot_code: string | null;
+    signed_quantity: string;
+    balance_after: string;
+    reference_label: string;
+    user_name: string | null;
+    notes: string | null;
+    unit_cost?: string;
+    total_cost?: string;
+};
+
+export type LotState = 'expired' | 'expiring' | 'ok';
+
+export type LotRow = {
+    id: number;
+    sku: string;
+    name: string;
+    lot_code: string;
+    expires_on: string | null;
+    warehouse: string;
+    quantity: string;
+    days_to_expiry: number | null;
+    state: LotState;
+};

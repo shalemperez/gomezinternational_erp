@@ -2,9 +2,11 @@
 
 use App\Http\Controllers\Inventory\DispatchController;
 use App\Http\Controllers\Inventory\InitialStockController;
+use App\Http\Controllers\Inventory\LotController;
+use App\Http\Controllers\Inventory\StockController;
+use App\Http\Controllers\Inventory\StockMovementController;
 use App\Http\Controllers\Inventory\WarehouseController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 Route::middleware(['auth'])->prefix('inventory')->name('inventory.')->group(function () {
     Route::get('warehouses/export', [WarehouseController::class, 'export'])->name('warehouses.export');
@@ -15,5 +17,9 @@ Route::middleware(['auth'])->prefix('inventory')->name('inventory.')->group(func
     Route::resource('dispatches', DispatchController::class);
     Route::get('initial-stock', [InitialStockController::class, 'create'])->name('initial-stock.create');
     Route::post('initial-stock', [InitialStockController::class, 'store'])->name('initial-stock.store');
-    Route::get('stock', fn () => Inertia::render('dashboard'))->name('stock.index');
+    Route::get('stock/export', [StockController::class, 'export'])->name('stock.export');
+    Route::get('stock', [StockController::class, 'index'])->name('stock.index');
+    Route::get('movements/export', [StockMovementController::class, 'export'])->name('movements.export');
+    Route::get('movements', [StockMovementController::class, 'index'])->name('movements.index');
+    Route::get('lots', [LotController::class, 'index'])->name('lots.index');
 });
