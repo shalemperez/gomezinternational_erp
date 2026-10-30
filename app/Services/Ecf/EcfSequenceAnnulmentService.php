@@ -89,8 +89,9 @@ class EcfSequenceAnnulmentService
     }
 
     /**
-     * Builds, signs and validates the ANECF, stores it and posts it to the DGII. The whole call runs in one transaction
-     * so a provider failure leaves the ranges pending and the sequences untouched.
+     * Builds, signs and validates the ANECF and stores it in a transaction, then posts it to the DGII outside any
+     * transaction so the sequence locks are never held during the network call. A provider failure marks the annulment
+     * as failed and leaves the ranges pending; the result is applied in a second transaction.
      *
      * @param  list<int>  $rangeIds
      *
@@ -101,7 +102,7 @@ class EcfSequenceAnnulmentService
         $environment = $this->ecf->environment();
         $certificate = $this->certificates->active() ?? throw new EcfException('No hay un certificado activo para firmar la anulación.');
 
-        return DB::transaction(function () use ($rangeIds, $actor, $environment, $certificate): EcfAnnulment {
+        [$annulment, $ranges, $signed] = DB::transaction(function () use ($rangeIds, $actor, $environment, $certificate): array {
             $this->lockElectronicSequences($environment->value);
 
             $ranges = EcfAnnulmentRange::query()->whereKey($rangeIds)->whereNull('ecf_annulment_id')->where('environment', $environment->value)
@@ -111,7 +112,8 @@ class EcfSequenceAnnulmentService
             }
 
             $annulment = EcfAnnulment::query()->create([
-                'environment' => $environment->value, 'status' => 'pending', 'created_by' => $actor->id,
+                'environment' => $environment->value, 'status' => 'sending', 'created_by' => $actor->id,
+                'ranges_count' => count($ranges), 'quantity' => (int) $ranges->sum('quantity'),
             ]);
             $ranges->each(fn (EcfAnnulmentRange $range) => $range->update(['ecf_annulment_id' => $annulment->id]));
 
@@ -124,13 +126,34 @@ class EcfSequenceAnnulmentService
             $signed = $this->signer->sign($this->writer->writeAnecf($rnc, $ranges, $now), $certificate);
             $this->validator->validate($this->load($signed->xml), 'anecf');
             $annulment->update([
-                'xml_path' => $this->storage->putNew("ecf/{$environment->value}/anulaciones/ANECF-{$now->format('YmdHis')}.xml", $signed->xml),
+                'xml_path' => $this->storage->putNew("ecf/{$environment->value}/anulaciones/ANECF-{$annulment->id}-{$now->format('YmdHis')}.xml", $signed->xml),
             ]);
 
+            return [$annulment, $ranges, $signed];
+        });
+
+        try {
             $result = $this->ecf->provider()->annul($annulment, $signed->xml);
-            activity('ecf_annulments')->causedBy($actor)->performedOn($annulment)->event('sent')
-                ->withProperties(['ranges' => $this->rangeSummary($ranges)])
-                ->log('Anulación enviada a la DGII');
+        } catch (\Throwable $e) {
+            $error = mb_substr($e->getMessage(), 0, 500);
+            DB::transaction(function () use ($annulment, $ranges, $actor, $error) {
+                $annulment->update(['status' => 'failed', 'response' => ['error' => $error]]);
+                $ranges->each(fn (EcfAnnulmentRange $range) => $range->update(['ecf_annulment_id' => null]));
+
+                activity('ecf_annulments')->causedBy($actor)->performedOn($annulment)->event('failed')
+                    ->withProperties(['error' => $error])
+                    ->log('Falló el envío de la anulación');
+            });
+
+            throw $e instanceof EcfException ? $e : new EcfException('No se pudo enviar la anulación a la DGII: '.$e->getMessage(), 0, $e);
+        }
+
+        activity('ecf_annulments')->causedBy($actor)->performedOn($annulment)->event('sent')
+            ->withProperties(['ranges' => $this->rangeSummary($ranges)])
+            ->log('Anulación enviada a la DGII');
+
+        return DB::transaction(function () use ($annulment, $ranges, $actor, $environment, $result): EcfAnnulment {
+            $this->lockElectronicSequences($environment->value);
 
             $accepted = $result->status === EcfStatus::Accepted;
             $annulment->update([

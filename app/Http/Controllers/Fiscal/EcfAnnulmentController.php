@@ -35,14 +35,14 @@ class EcfAnnulmentController extends Controller
                 'reason' => $range->reason,
                 'document_number' => $range->ecfDocument?->document?->getAttribute('number'),
             ])->values()->all(),
-            'history' => EcfAnnulment::query()->with('ranges')->where('environment', $ecf->environment()->value)->latest('id')->get()
+            'history' => EcfAnnulment::query()->where('environment', $ecf->environment()->value)->latest('id')->get()
                 ->map(fn (EcfAnnulment $annulment) => [
                     'id' => $annulment->id,
                     'status' => $annulment->status,
                     'status_label' => $this->statusLabel($annulment->status),
                     'sent_at' => $annulment->sent_at?->toIso8601String(),
-                    'ranges_count' => $annulment->ranges->count(),
-                    'quantity' => (int) $annulment->ranges->sum('quantity'),
+                    'ranges_count' => $annulment->ranges_count,
+                    'quantity' => $annulment->quantity,
                     'messages' => array_values((array) ($annulment->response['mensajes'] ?? [])),
                 ])->values()->all(),
             'environment_label' => $ecf->environment()->label(),
@@ -64,18 +64,28 @@ class EcfAnnulmentController extends Controller
     }
 
     #[Middleware('permission:fiscal.ecf.annul')]
-    public function destroyRange(EcfAnnulmentRange $range): RedirectResponse
+    public function destroyRange(Request $request, EcfAnnulmentRange $range): RedirectResponse
     {
-        $deleted = DB::transaction(function () use ($range): bool {
+        $error = DB::transaction(function () use ($request, $range): ?string {
             $pending = EcfAnnulmentRange::query()->whereKey($range->id)->whereNull('ecf_annulment_id')->lockForUpdate()->first();
-            $pending?->delete();
+            if ($pending === null) {
+                return 'Solo se eliminan rangos pendientes';
+            }
+            if ($pending->ecf_document_id !== null) {
+                return 'Este rango proviene de una factura anulada y debe enviarse a la DGII.';
+            }
 
-            return $pending !== null;
+            activity('ecf_annulments')->causedBy($request->user())->performedOn($pending)->event('range_deleted')
+                ->withProperties(['ncf_type' => $pending->ncf_type, 'range_from' => (int) $pending->range_from, 'range_to' => (int) $pending->range_to])
+                ->log('Rango pendiente eliminado');
+            $pending->delete();
+
+            return null;
         });
 
-        return $deleted
+        return $error === null
             ? redirect()->route('fiscal.ecf-annulments.index')->with('success', 'Rango eliminado')
-            : redirect()->route('fiscal.ecf-annulments.index')->with('error', 'Solo se eliminan rangos pendientes');
+            : redirect()->route('fiscal.ecf-annulments.index')->with('error', $error);
     }
 
     #[Middleware('permission:fiscal.ecf.annul')]
@@ -97,6 +107,8 @@ class EcfAnnulmentController extends Controller
             'sent' => 'Enviada',
             'accepted' => 'Aceptada',
             'rejected' => 'Rechazada',
+            'sending' => 'Enviando',
+            'failed' => 'Falló el envío',
             default => 'Pendiente',
         };
     }

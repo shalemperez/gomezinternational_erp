@@ -58,9 +58,11 @@ const statusVariants: Record<
     'default' | 'secondary' | 'outline' | 'destructive'
 > = {
     pending: 'outline',
+    sending: 'outline',
     sent: 'secondary',
     accepted: 'default',
     rejected: 'destructive',
+    failed: 'destructive',
 };
 
 export default function EcfAnnulmentIndex({

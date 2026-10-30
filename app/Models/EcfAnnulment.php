@@ -8,16 +8,18 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 /**
  * @property string $status
+ * @property int $ranges_count
+ * @property int $quantity
  * @property array<string, mixed>|null $response
  * @property CarbonInterface|null $sent_at
  */
 class EcfAnnulment extends Model
 {
-    protected $fillable = ['environment', 'status', 'xml_path', 'response', 'sent_at', 'created_by'];
+    protected $fillable = ['environment', 'status', 'ranges_count', 'quantity', 'xml_path', 'response', 'sent_at', 'created_by'];
 
     protected function casts(): array
     {
-        return ['response' => 'array', 'sent_at' => 'datetime'];
+        return ['ranges_count' => 'integer', 'quantity' => 'integer', 'response' => 'array', 'sent_at' => 'datetime'];
     }
 
     /** @return HasMany<EcfAnnulmentRange, $this> */

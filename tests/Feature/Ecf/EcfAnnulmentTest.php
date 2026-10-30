@@ -12,6 +12,7 @@ use App\Services\Ecf\EcfSequenceAnnulmentService;
 use App\Services\Ecf\XsdValidator;
 use App\Services\Fiscal\FiscalNumberingService;
 use Database\Seeders\DocumentSequenceSeeder;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Http;
@@ -82,4 +83,37 @@ test('the annulments page lists pending ranges including invoices cancelled befo
     $ids = EcfAnnulmentRange::query()->whereNull('ecf_annulment_id')->pluck('id')->all();
     $this->post(route('fiscal.ecf-annulments.send'), ['range_ids' => $ids])->assertRedirect()->assertSessionHas('success', 'Anulación enviada: Aceptada');
     expect(EcfAnnulment::query()->where('status', 'accepted')->count())->toBe(1)->and(EcfAnnulmentRange::query()->whereNull('ecf_annulment_id')->count())->toBe(0);
+});
+
+test('a provider failure leaves the ranges pending and the annulment marked failed', function () {
+    ecfMode('dgii');
+    Http::fake([...fakeDgiiAuth(), 'https://ecf.dgii.gov.do/testecf/anulacionrangos/api/operaciones/anularrango' => fn () => throw new ConnectionException('cURL error 28: timeout')]);
+    $actor = User::factory()->create();
+    $service = app(EcfSequenceAnnulmentService::class);
+    $range = $service->addRange(NcfType::E31, 1, 10, 'x', $actor);
+    expect(fn () => $service->send([$range->id], $actor))->toThrow(EcfException::class);
+    expect($range->fresh()->ecf_annulment_id)->toBeNull()->and(EcfAnnulment::query()->where('status', 'failed')->count())->toBe(1)
+        ->and(NcfSequence::query()->where('ncf_type', 'E31')->where('environment', 'test')->value('next_number'))->toBe(1);
+});
+
+test('a rejected annulment keeps its counts in the history', function () {
+    ecfMode('dgii');
+    Http::fake([...fakeDgiiAuth(), 'https://ecf.dgii.gov.do/testecf/anulacionrangos/api/operaciones/anularrango' => Http::response(['rnc' => '131880738', 'codigo' => '2', 'nombre' => 'Rechazado', 'mensajes' => ['Las secuencias que está intentando anular han sido utilizadas']])]);
+    $actor = User::factory()->create();
+    $service = app(EcfSequenceAnnulmentService::class);
+    $range = $service->addRange(NcfType::E31, 1, 10, 'x', $actor);
+    $service->send([$range->id], $actor);
+    actingAsRole('accounting');
+    $this->get(route('fiscal.ecf-annulments.index'))->assertOk()->assertInertia(fn ($p) => $p->component('fiscal/ecf-annulments/index')
+        ->where('history.0.status', 'rejected')->where('history.0.ranges_count', 1)->where('history.0.quantity', (int) $range->quantity));
+});
+
+test('ranges created by cancelled invoices cannot be deleted', function () {
+    $invoice = issuedInvoice();
+    app(CancelInvoice::class)->handle($invoice, User::factory()->create(), 'dup');
+    $range = EcfAnnulmentRange::query()->whereNull('ecf_annulment_id')->whereNotNull('ecf_document_id')->firstOrFail();
+    actingAsRole('accounting');
+    $this->delete(route('fiscal.ecf-annulments.ranges.destroy', $range))->assertRedirect(route('fiscal.ecf-annulments.index'))
+        ->assertSessionHas('error', 'Este rango proviene de una factura anulada y debe enviarse a la DGII.');
+    expect(EcfAnnulmentRange::query()->whereKey($range->id)->exists())->toBeTrue();
 });
