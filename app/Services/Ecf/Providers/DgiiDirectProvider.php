@@ -50,9 +50,11 @@ class DgiiDirectProvider implements EcfProvider
         if ($document->isRfce()) {
             $response = $this->client->receiveRfce($this->storage->get((string) $document->rfce_xml_path), basename((string) $document->rfce_xml_path));
 
-            return array_key_exists('codigo', $response['json'])
-                ? $this->dgiiResult($response['json'], $response['status'], null)
-                : $this->rejection($response['status'], $response['json']);
+            if (array_key_exists('codigo', $response['json'])) {
+                return $this->dgiiResult($response['json'], $response['status'], null);
+            }
+
+            return $this->answer($response['status'], $response['json']);
         }
 
         $response = $this->client->receive($this->storage->get((string) $document->xml_path), basename((string) $document->xml_path));
@@ -68,7 +70,7 @@ class DgiiDirectProvider implements EcfProvider
             );
         }
 
-        return $this->rejection($response['status'], $response['json']);
+        return $this->answer($response['status'], $response['json']);
     }
 
     /**
@@ -91,13 +93,12 @@ class DgiiDirectProvider implements EcfProvider
         $json = $response['json'];
 
         $accepted = (string) ($json['codigo'] ?? '') === '1' || str_starts_with(strtolower((string) ($json['nombre'] ?? '')), 'acept');
-        $messages = is_array($json['mensajes'] ?? null) ? $json['mensajes'] : [];
 
         return new EcfSubmissionResult(
             status: $accepted ? EcfStatus::Accepted : EcfStatus::Rejected,
             trackId: null,
             code: isset($json['codigo']) ? (int) $json['codigo'] : null,
-            messages: $accepted ? [] : array_values(array_map(fn (mixed $message): array => ['codigo' => '', 'valor' => (string) $message], $messages)),
+            messages: $accepted ? [] : $this->messages($json['mensajes'] ?? []),
             raw: $json,
             sequenceUsed: null,
             httpStatus: $response['status'],
@@ -124,14 +125,33 @@ class DgiiDirectProvider implements EcfProvider
         );
     }
 
+    /**
+     * Only HTTP 400 is a fiscal rejection: a rejected e-NCF is burned for good, so any other answer is a transient failure
+     * that the caller retries.
+     *
+     * @param  array<string, mixed>  $json
+     *
+     * @throws EcfException on any status other than 400 without a result
+     */
+    private function answer(int $httpStatus, array $json): EcfSubmissionResult
+    {
+        if ($httpStatus === 400) {
+            return $this->rejection($httpStatus, $json);
+        }
+
+        throw new EcfException("Respuesta inesperada de la DGII ({$httpStatus}): ".mb_substr(json_encode($json) ?: '', 0, 300));
+    }
+
     /** @param  array<string, mixed>  $json */
     private function rejection(int $httpStatus, array $json): EcfSubmissionResult
     {
+        $firstMessage = $this->messages($json['mensajes'] ?? [])[0]['valor'] ?? null;
+
         return new EcfSubmissionResult(
             status: EcfStatus::Rejected,
             trackId: null,
             code: null,
-            messages: [['codigo' => (string) $httpStatus, 'valor' => (string) ($json['mensaje'] ?? $json['error'] ?? 'Rechazado por la DGII')]],
+            messages: [['codigo' => (string) $httpStatus, 'valor' => (string) ($json['mensaje'] ?? $json['error'] ?? $firstMessage ?? 'Rechazado por la DGII')]],
             raw: $json,
             sequenceUsed: null,
             httpStatus: $httpStatus,

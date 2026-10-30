@@ -27,7 +27,12 @@ class DgiiClient
     /** @throws EcfException when the environment has no endpoint for the key */
     public function endpoint(string $key): string
     {
-        return config("ecf.environments.{$this->ecf->environment()->value}.{$key}");
+        $url = config("ecf.environments.{$this->ecf->environment()->value}.{$key}");
+        if (blank($url)) {
+            throw new EcfException("Falta configurar el endpoint DGII [{$key}] para el ambiente actual.");
+        }
+
+        return $url;
     }
 
     /** @throws EcfException when the DGII does not accept the seed */
@@ -48,8 +53,19 @@ class DgiiClient
         $certificate = $this->certificates->requireActive();
 
         $seedResponse = $this->request(fn (): Response => Http::timeout((int) config('ecf.http_timeout_seconds'))->get($this->endpoint('semilla')), 'semilla');
+        if (! $seedResponse->successful()) {
+            throw new EcfException("La DGII no entregó la semilla ({$seedResponse->status()}): ".$this->excerpt($seedResponse));
+        }
+
         $seed = new DOMDocument;
-        if (! $seed->loadXML($seedResponse->body())) {
+        $previous = libxml_use_internal_errors(true);
+        try {
+            $loaded = $seed->loadXML($seedResponse->body());
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
+        if (! $loaded) {
             throw new EcfException('La DGII devolvió una semilla no válida.');
         }
 

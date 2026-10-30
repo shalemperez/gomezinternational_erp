@@ -126,3 +126,30 @@ test('directory lookup returns the receiver urls of a taxpayer or null', functio
     $client = app(DgiiClient::class);
     expect($client->directoryByRnc('101010101')['urlAceptacion'])->toBe('https://prov.test/fe')->and($client->directoryByRnc('999999999'))->toBeNull();
 });
+
+test('a seed request failure raises an ecf exception', function () {
+    Http::fake([...fakeAuth(), 'https://ecf.dgii.gov.do/testecf/autenticacion/api/autenticacion/semilla' => Http::response('<html>Not found</html>', 404)]);
+    $service = app(EcfService::class);
+    $doc = $service->create(issuedInvoice(), new FiscalNumber('E310000000007', NcfType::E31, CarbonImmutable::parse('2027-12-31'), electronicSequenceId('E31')), null);
+    expect(fn () => $service->submit($doc))->toThrow(EcfException::class, 'no entregó la semilla (404)');
+});
+
+test('a seed body that is not xml raises an ecf exception', function () {
+    Http::fake([...fakeAuth(), 'https://ecf.dgii.gov.do/testecf/autenticacion/api/autenticacion/semilla' => Http::response('not xml', 200)]);
+    expect(fn () => app(DgiiClient::class)->authenticate())->toThrow(EcfException::class, 'La DGII devolvió una semilla no válida.');
+});
+
+test('transient dgii answers are retried, not rejected', function () {
+    Http::fake([...fakeAuth(), 'https://ecf.dgii.gov.do/testecf/recepcion/api/facturaselectronicas' => Http::sequence()->push('{}', 429)->push('{}', 200)]);
+    $service = app(EcfService::class);
+    $doc = $service->create(issuedInvoice(), new FiscalNumber('E310000000008', NcfType::E31, CarbonImmutable::parse('2027-12-31'), electronicSequenceId('E31')), null);
+    expect(fn () => $service->submit($doc))->toThrow(EcfException::class, 'Respuesta inesperada de la DGII (429)')
+        ->and(fn () => $service->submit($doc))->toThrow(EcfException::class, 'Respuesta inesperada de la DGII (200)');
+});
+
+test('a 400 answer is a rejection with the dgii message', function () {
+    Http::fake([...fakeAuth(), 'https://ecf.dgii.gov.do/testecf/recepcion/api/facturaselectronicas' => Http::response('{"mensaje":"Formato inválido"}', 400)]);
+    $service = app(EcfService::class);
+    $doc = $service->submit($service->create(issuedInvoice(), new FiscalNumber('E310000000009', NcfType::E31, CarbonImmutable::parse('2027-12-31'), electronicSequenceId('E31')), null));
+    expect($doc->status)->toBe(EcfStatus::Rejected)->and($doc->dgii_messages[0]['valor'])->toBe('Formato inválido');
+});
