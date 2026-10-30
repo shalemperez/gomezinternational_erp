@@ -1,5 +1,6 @@
 import { Head, Link, router } from '@inertiajs/react';
 import { FileText, Pencil } from 'lucide-react';
+import { useState } from 'react';
 import { ConfirmDelete } from '@/components/erp/confirm-delete';
 import { DocumentHeader } from '@/components/erp/document-header';
 import { RecordHistory } from '@/components/erp/record-history';
@@ -15,6 +16,7 @@ import {
     AlertDialogTrigger,
 } from '@/components/ui/alert-dialog';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { formatDate, formatNumber } from '@/lib/format';
 import {
@@ -34,6 +36,7 @@ type Props = {
         update: boolean;
         delete: boolean;
         confirm: boolean;
+        expiredOverride: boolean;
     };
 };
 
@@ -42,6 +45,7 @@ export default function DispatchShow({
     history,
     can: abilities,
 }: Props) {
+    const [overrideReason, setOverrideReason] = useState('');
     const showCosts = dispatch.lines.some(
         (line) => line.unit_cost !== undefined,
     );
@@ -68,17 +72,45 @@ export default function DispatchShow({
                                 Confirmar conduce
                             </AlertDialogTitle>
                             <AlertDialogDescription>
+                                {dispatch.has_expired_lots
+                                    ? 'Este conduce incluye lotes vencidos. '
+                                    : ''}
                                 Se descontará el inventario. Esta acción no se
                                 puede deshacer.
                             </AlertDialogDescription>
+                            {dispatch.has_expired_lots &&
+                                abilities.expiredOverride && (
+                                    <Textarea
+                                        placeholder="Motivo de la autorización"
+                                        maxLength={255}
+                                        value={overrideReason}
+                                        onChange={(event) =>
+                                            setOverrideReason(
+                                                event.target.value,
+                                            )
+                                        }
+                                    />
+                                )}
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                             <AlertDialogCancel>Cancelar</AlertDialogCancel>
                             <AlertDialogAction
+                                disabled={
+                                    dispatch.has_expired_lots &&
+                                    abilities.expiredOverride &&
+                                    overrideReason.trim() === ''
+                                }
                                 onClick={() =>
                                     router.post(
                                         confirm.url(dispatch.id),
-                                        {},
+                                        dispatch.has_expired_lots &&
+                                            abilities.expiredOverride
+                                            ? {
+                                                  expired_override: true,
+                                                  expired_override_reason:
+                                                      overrideReason,
+                                              }
+                                            : {},
                                         { preserveScroll: true },
                                     )
                                 }

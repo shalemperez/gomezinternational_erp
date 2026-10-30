@@ -24,18 +24,25 @@ class ConfirmDispatch
         private readonly AccountingEventRecorder $events,
     ) {}
 
-    public function handle(Dispatch $dispatch, User $actor): Dispatch
+    public function handle(Dispatch $dispatch, User $actor, bool $expiredOverride = false, ?string $overrideReason = null): Dispatch
     {
-        return DB::transaction(function () use ($dispatch, $actor): Dispatch {
+        return DB::transaction(function () use ($dispatch, $actor, $expiredOverride, $overrideReason): Dispatch {
             $invoiceId = Dispatch::query()->whereKey($dispatch->id)->value('invoice_id');
             $invoice = Invoice::query()->whereKey($invoiceId)->lockForUpdate()->with('lines')->firstOrFail();
-            $dispatch = Dispatch::query()->whereKey($dispatch->id)->lockForUpdate()->with(['lines.product'])->firstOrFail();
+            $dispatch = Dispatch::query()->whereKey($dispatch->id)->lockForUpdate()->with(['lines.product', 'lines.lot'])->firstOrFail();
             if ($dispatch->status !== DispatchStatus::Draft) {
                 throw new DocumentStateException("El conduce está {$dispatch->status->label()} y no admite esta acción");
             }
 
             if (! in_array($invoice->status, [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid, InvoiceStatus::Paid], true)) {
                 throw new DocumentStateException('Solo se despachan facturas emitidas');
+            }
+
+            $expired = $dispatch->lines->filter(fn ($line) => $line->lot?->expires_on !== null && $line->lot->expires_on->toDateString() < $dispatch->dispatch_date->toDateString());
+            if ($expired->isNotEmpty() && ! $expiredOverride) {
+                $line = $expired->first();
+
+                throw new DocumentStateException("El lote {$line->lot->code} de {$line->product->sku} venció el {$line->lot->expires_on->format('d/m/Y')}; un usuario autorizado debe aprobar el despacho de lotes vencidos.");
             }
 
             $number = $this->documentNumbering->next(DocumentKind::Dispatch);
@@ -75,6 +82,11 @@ class ConfirmDispatch
             activity('dispatches')->causedBy($actor)->performedOn($dispatch)->event('confirmed')
                 ->withProperties(['number' => $number, 'invoice_id' => $invoice->id, 'total_cost' => $totalCost])
                 ->log("Conduce {$number} confirmado");
+            if ($expired->isNotEmpty()) {
+                activity('dispatches')->causedBy($actor)->performedOn($dispatch)->event('expired_lot_override')
+                    ->withProperties(['number' => $number, 'lots' => $expired->map(fn ($line) => $line->lot->code)->values()->all(), 'reason' => $overrideReason])
+                    ->log("Despacho de lotes vencidos autorizado en el conduce {$number}");
+            }
             activity('invoices')->causedBy($actor)->performedOn($invoice)->event('dispatched')
                 ->withProperties(['dispatch_id' => $dispatch->id, 'number' => $number])
                 ->log("Conduce {$number} despachado de la factura {$invoice->number}");

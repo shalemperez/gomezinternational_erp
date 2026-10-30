@@ -8,6 +8,7 @@ use App\Enums\DispatchStatus;
 use App\Enums\InvoiceStatus;
 use App\Exports\TableExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Inventory\ConfirmDispatchRequest;
 use App\Http\Requests\Inventory\StoreDispatchRequest;
 use App\Models\Dispatch;
 use App\Models\DispatchLine;
@@ -90,6 +91,7 @@ class DispatchController extends Controller
                 'update' => $user->can('inventory.dispatches.create') && $dispatch->status === DispatchStatus::Draft,
                 'delete' => $user->can('inventory.dispatches.create') && $dispatch->status === DispatchStatus::Draft,
                 'confirm' => $user->can('inventory.dispatches.confirm') && $dispatch->status === DispatchStatus::Draft,
+                'expiredOverride' => $user->can('inventory.dispatches.expired-override'),
             ],
         ]);
     }
@@ -149,9 +151,15 @@ class DispatchController extends Controller
     }
 
     #[Middleware('permission:inventory.dispatches.confirm')]
-    public function confirm(Request $request, Dispatch $dispatch, ConfirmDispatch $confirmDispatch): RedirectResponse
+    public function confirm(ConfirmDispatchRequest $request, Dispatch $dispatch, ConfirmDispatch $confirmDispatch): RedirectResponse
     {
-        $confirmed = $confirmDispatch->handle($dispatch, $this->actor($request));
+        $user = $this->actor($request);
+        $override = $request->boolean('expired_override');
+        if ($override && ! $user->can('inventory.dispatches.expired-override')) {
+            abort(403);
+        }
+
+        $confirmed = $confirmDispatch->handle($dispatch, $user, $override, $request->string('expired_override_reason')->trim()->toString() ?: null);
 
         return redirect()->route('inventory.dispatches.show', $confirmed)->with('success', "Conduce {$confirmed->number} confirmado");
     }
@@ -235,7 +243,7 @@ class DispatchController extends Controller
         ];
     }
 
-    /** @return array<int, array{id: int, product_id: int, code: string, expires_on: string|null, quantity: string}> */
+    /** @return array<int, array{id: int, product_id: int, code: string, expires_on: string|null, quantity: string, expired: bool}> */
     private function stockedLots(Invoice $invoice): array
     {
         $productIds = $invoice->lines->filter(fn (InvoiceLine $line) => $line->product->tracks_lots)->pluck('product_id')->unique()->values()->all();
@@ -247,6 +255,7 @@ class DispatchController extends Controller
             ->map(fn (StockBalance $balance) => [
                 'id' => (int) $balance->lot_id, 'product_id' => $balance->product_id, 'code' => $balance->lot->code,
                 'expires_on' => $balance->lot->expires_on?->toDateString(), 'quantity' => (string) $balance->quantity,
+                'expired' => $balance->lot->expires_on !== null && $balance->lot->expires_on->toDateString() < today()->toDateString(),
             ])->values()->all();
     }
 
@@ -268,7 +277,11 @@ class DispatchController extends Controller
             $dispatch->lines->each->makeHidden(['unit_cost', 'total_cost']);
         }
 
-        return [...$dispatch->toArray(), 'status_label' => $dispatch->status->label()];
+        return [
+            ...$dispatch->toArray(),
+            'status_label' => $dispatch->status->label(),
+            'has_expired_lots' => $dispatch->lines->contains(fn (DispatchLine $line) => $line->lot?->expires_on !== null && $line->lot->expires_on->toDateString() < $dispatch->dispatch_date->toDateString()),
+        ];
     }
 
     /** @return Builder<Dispatch> */

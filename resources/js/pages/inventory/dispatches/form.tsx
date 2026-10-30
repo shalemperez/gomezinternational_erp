@@ -256,6 +256,9 @@ export default function DispatchForm({ invoice, lots, dispatch }: Props) {
                                                                     {lot.expires_on
                                                                         ? ` · vence ${lot.expires_on}`
                                                                         : ''}
+                                                                    {lot.expired
+                                                                        ? ' · VENCIDO'
+                                                                        : ''}
                                                                     {` · existencia ${formatNumber(lot.quantity, 4)}`}
                                                                 </SelectItem>
                                                             ))}

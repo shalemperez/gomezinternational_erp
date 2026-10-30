@@ -136,6 +136,7 @@ final class PermissionCatalog
         $add('inventory.dispatches.view', 'Ver conduces', [...$all, 'sales', 'warehouse']);
         $add('inventory.dispatches.create', 'Crear conduces', [...$all, 'warehouse']);
         $add('inventory.dispatches.confirm', 'Confirmar conduces (salida de almacén)', [...$all, 'warehouse']);
+        $add('inventory.dispatches.expired-override', 'Autorizar despacho de lotes vencidos', ['owner', 'management']);
         $add('inventory.initial-stock.import', 'Cargar existencias iniciales', ['owner', 'accounting', 'warehouse']);
         $add('inventory.alerts.receive', 'Recibir alertas de stock mínimo y vencimientos', ['owner', 'management', 'warehouse']);
         $add('inventory.dispatches.export', 'Exportar conduces', array_values(array_intersect([...$all, 'sales', 'warehouse'], self::EXPORTERS)));

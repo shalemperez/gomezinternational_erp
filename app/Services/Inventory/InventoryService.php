@@ -15,6 +15,7 @@ use App\Services\Accounting\AccountingEventRecorder;
 use App\Support\Inventory\StockLine;
 use App\Support\Money\Decimal;
 use Brick\Math\RoundingMode;
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -153,11 +154,13 @@ class InventoryService
     }
 
     /** @return list<array{lot_id: int, code: string, expires_on: ?string, quantity: string}> */
-    public function suggestLots(int $productId, int $warehouseId, string $quantity): array
+    public function suggestLots(int $productId, int $warehouseId, string $quantity, ?CarbonInterface $onDate = null): array
     {
         $needed = Decimal::of($quantity);
         $out = [];
+        $cutoff = ($onDate ?? today())->toDateString();
         $rows = StockBalance::query()->with('lot')->where('product_id', $productId)->where('warehouse_id', $warehouseId)->whereNotNull('lot_id')->where('quantity', '>', 0)->get()
+            ->filter(fn (StockBalance $row) => $row->lot->expires_on === null || $row->lot->expires_on->toDateString() >= $cutoff)
             ->sortBy([fn (StockBalance $a, StockBalance $b) => ($a->lot->expires_on?->getTimestamp() ?? PHP_INT_MAX) <=> ($b->lot->expires_on?->getTimestamp() ?? PHP_INT_MAX) ?: $a->lot_id <=> $b->lot_id]);
         foreach ($rows as $row) {
             if ($needed->isNegativeOrZero()) {

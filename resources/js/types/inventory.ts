@@ -27,6 +27,7 @@ export type DispatchLotOption = {
     code: string;
     expires_on: string | null;
     quantity: string;
+    expired: boolean;
 };
 
 export type DispatchInvoiceLine = {
@@ -82,6 +83,7 @@ export type DispatchDetail = Omit<
     'invoice' | 'client' | 'warehouse'
 > & {
     notes: string | null;
+    has_expired_lots: boolean;
     total_cost?: string;
     confirmed_at: string | null;
     invoice: { id: number; number: string; ncf: string | null } | null;

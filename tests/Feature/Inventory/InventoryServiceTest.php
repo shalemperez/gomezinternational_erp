@@ -130,3 +130,12 @@ test('dispatching a lot-tracked product requires a lot and enough stock in that 
     expect(fn () => $this->svc->dispatch(new StockLine($p->id, $this->wh->id, '5', null, $lot->id), $this->actor, $this->actor))
         ->toThrow(InventoryException::class);
 });
+
+test('fefo skips lots that are already expired', function () {
+    $p = Product::factory()->create(['tracks_lots' => true]);
+    $this->svc->receive(new StockLine($p->id, $this->wh->id, '5', '10', null, 'EXP', now()->subDay()->toDateString()), StockMovementType::Initial, $this->actor, $this->actor);
+    $this->svc->receive(new StockLine($p->id, $this->wh->id, '3', '10', null, 'OK', now()->addMonth()->toDateString()), StockMovementType::Initial, $this->actor, $this->actor);
+    $s = $this->svc->suggestLots($p->id, $this->wh->id, '4');
+    expect($s)->toHaveCount(1)->and($s[0]['code'])->toBe('OK')->and($s[0]['quantity'])->toBe('3.0000');
+    expect($this->svc->suggestLots($p->id, $this->wh->id, '4', now()->subDays(2)))->toHaveCount(1)->and($this->svc->suggestLots($p->id, $this->wh->id, '4', now()->subDays(2))[0]['code'])->toBe('EXP');
+});

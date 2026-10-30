@@ -28,7 +28,7 @@ test('seeder creates all roles and permissions idempotently', function () {
         ->and(Role::findByName('accounting')->hasPermissionTo('finance.accounts.export'))->toBeTrue()
         ->and(Role::findByName('accounting')->hasPermissionTo('admin.activity-log.export'))->toBeFalse()
         ->and(Role::findByName('owner')->hasPermissionTo('admin.activity-log.export'))->toBeTrue()
-        ->and(Permission::count())->toBe(119)
+        ->and(Permission::count())->toBe(120)
         ->and(Role::findByName('warehouse')->hasPermissionTo('inventory.stock.export'))->toBeFalse()
         ->and(Role::findByName('sales')->hasPermissionTo('sales.invoices.issue'))->toBeTrue()
         ->and(Role::findByName('sales')->hasPermissionTo('sales.invoices.cancel'))->toBeFalse()
@@ -37,7 +37,9 @@ test('seeder creates all roles and permissions idempotently', function () {
         ->and(Role::findByName('warehouse')->hasPermissionTo('inventory.dispatches.confirm'))->toBeTrue()
         ->and(Role::findByName('warehouse')->hasPermissionTo('inventory.stock.view-costs'))->toBeFalse()
         ->and(Role::findByName('owner')->hasPermissionTo('fiscal.mode.manage'))->toBeTrue()
-        ->and(Role::findByName('management')->hasPermissionTo('fiscal.mode.manage'))->toBeFalse();
+        ->and(Role::findByName('management')->hasPermissionTo('fiscal.mode.manage'))->toBeFalse()
+        ->and(Role::findByName('management')->hasPermissionTo('inventory.dispatches.expired-override'))->toBeTrue()
+        ->and(Role::findByName('warehouse')->hasPermissionTo('inventory.dispatches.expired-override'))->toBeFalse();
 });
 
 test('management has no admin permissions', function () {

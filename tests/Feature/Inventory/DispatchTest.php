@@ -132,3 +132,31 @@ test('dispatch history exposes costs to owner', function () {
     $history = $response->viewData('page')['props']['history'];
     expect(json_encode($history))->toContain('total_cost');
 });
+
+test('expired lots are skipped by fefo and refused at confirm unless an authorised user overrides with a reason', function () {
+    $user = actingAsRole('warehouse');
+    activeSequence('B01', ['range_to' => 100]);
+    $product = Product::factory()->create(['tracks_lots' => true, 'itbis_rate' => '18.00']);
+    $wh = Warehouse::factory()->create(['is_default' => true]);
+    $svc = app(InventoryService::class);
+    $svc->receive(new StockLine($product->id, $wh->id, '5', '10', null, 'OLD', now()->subDay()->toDateString()), StockMovementType::Initial, $user, $user);
+    $svc->receive(new StockLine($product->id, $wh->id, '5', '10', null, 'OK', now()->addMonth()->toDateString()), StockMovementType::Initial, $user, $user);
+    $draft = app(SaveInvoice::class)->handle(validInvoicePayload(['warehouse_id' => $wh->id, 'salesperson_id' => Salesperson::factory()->create()->id, 'lines' => [['product_id' => $product->id, 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '0', 'description' => '']]]), $user->givePermissionTo('sales.invoices.view-all'));
+    $i = app(IssueInvoice::class)->handle($draft, $user);
+    $line = $i->lines->first();
+    $old = Lot::where('code', 'OLD')->firstOrFail();
+
+    $this->get(route('inventory.dispatches.create', ['invoice' => $i->id]))->assertInertia(fn ($p) => $p->has('invoice.lines.0.suggested_lots', 1)->where('invoice.lines.0.suggested_lots.0.code', 'OK')->where('lots.0.code', 'OLD')->where('lots.0.expired', true));
+    $this->post(route('inventory.dispatches.store'), validDispatchPayload($i, ['lines' => [['invoice_line_id' => $line->id, 'quantity' => '2', 'lot_id' => $old->id]]]))->assertRedirect();
+    $d = Dispatch::firstOrFail();
+    $this->get(route('inventory.dispatches.show', $d))->assertInertia(fn ($p) => $p->where('dispatch.has_expired_lots', true)->where('can.expiredOverride', false));
+    $this->post(route('inventory.dispatches.confirm', $d))->assertRedirect()->assertSessionHas('error', 'El lote OLD de '.$product->sku.' venció el '.now()->subDay()->format('d/m/Y').'; un usuario autorizado debe aprobar el despacho de lotes vencidos.');
+    $this->post(route('inventory.dispatches.confirm', $d), ['expired_override' => '1', 'expired_override_reason' => 'Cliente acepta'])->assertForbidden();
+    expect($d->fresh()->status)->toBe(DispatchStatus::Draft)->and(StockMovement::where('type', 'dispatch')->count())->toBe(0);
+
+    $owner = actingAsRole('owner');
+    $this->post(route('inventory.dispatches.confirm', $d), ['expired_override' => '1'])->assertSessionHasErrors(['expired_override_reason' => 'Indica el motivo de la autorización.']);
+    $this->post(route('inventory.dispatches.confirm', $d), ['expired_override' => '1', 'expired_override_reason' => 'Cliente acepta'])->assertRedirect()->assertSessionHas('success');
+    expect($d->fresh()->status)->toBe(DispatchStatus::Confirmed)
+        ->and(Activity::inLog('dispatches')->where('event', 'expired_lot_override')->where('subject_id', $d->id)->where('causer_id', $owner->id)->first()->properties['reason'])->toBe('Cliente acepta');
+});
