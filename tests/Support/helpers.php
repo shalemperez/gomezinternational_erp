@@ -2,6 +2,7 @@
 
 use App\Actions\Sales\IssueInvoice;
 use App\Actions\Sales\SaveInvoice;
+use App\Enums\NcfType;
 use App\Enums\StockMovementType;
 use App\Models\Client;
 use App\Models\Currency;
@@ -139,7 +140,13 @@ function validNcfSequencePayload(array $over = []): array
 
 function activeSequence(string $type = 'B01', array $over = []): NcfSequence
 {
-    return NcfSequence::factory()->create(array_merge(['ncf_type' => $type, 'range_from' => 1, 'range_to' => 100, 'next_number' => 1, 'expires_on' => in_array($type, ['B02', 'B04'], true) ? null : now()->addYear()->toDateString(), 'is_active' => true], $over));
+    $ncfType = NcfType::from($type);
+    $isElectronic = $ncfType->isElectronic();
+
+    return NcfSequence::factory()->create(array_merge([
+        'ncf_type' => $type, 'environment' => $isElectronic ? 'test' : 'prod', 'range_from' => 1, 'range_to' => $isElectronic ? 10000000 : 100, 'next_number' => 1,
+        'expires_on' => $ncfType->expires() ? now()->addYear()->toDateString() : null, 'is_active' => true,
+    ], $over));
 }
 
 /** A sales-role user linked to a salesperson (the shape every scoped-document test needs). */

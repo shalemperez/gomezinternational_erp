@@ -1,6 +1,7 @@
 <?php
 
 use App\Exceptions\DocumentStateException;
+use App\Exceptions\EcfException;
 use App\Exceptions\FiscalNumberingException;
 use App\Exceptions\GmailNotConnectedException;
 use App\Exceptions\ImmutableDocumentException;
@@ -49,7 +50,7 @@ return Application::configure(basePath: dirname(__DIR__))
         );
 
         $exceptions->render(function (RuntimeException $e, Request $request) {
-            $flashable = [DocumentStateException::class, InventoryException::class, FiscalNumberingException::class, ImmutableDocumentException::class, GmailNotConnectedException::class, MissingExchangeRateException::class];
+            $flashable = [DocumentStateException::class, InventoryException::class, FiscalNumberingException::class, ImmutableDocumentException::class, GmailNotConnectedException::class, MissingExchangeRateException::class, EcfException::class];
             foreach ($flashable as $class) {
                 if ($e instanceof $class && ! $request->expectsJson()) {
                     return back()->with('error', $e->getMessage());
