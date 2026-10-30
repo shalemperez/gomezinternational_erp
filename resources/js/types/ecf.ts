@@ -132,3 +132,31 @@ export type ReceivedEcfDetail = {
     arecf_url: string | null;
     acecf_url: string | null;
 };
+
+export type EcfCertificationReadiness = {
+    key: string;
+    label: string;
+    ok: boolean;
+    hint: string;
+};
+
+export type EcfCertificationStep = {
+    key: string;
+    title: string;
+    description: string;
+    who: 'empresa' | 'sistema';
+    done: boolean;
+};
+
+export type EcfCertificationDocument = {
+    id: number;
+    encf: string;
+    type_label: string;
+    status: EcfStatus;
+    status_label: string;
+    track_id: string | null;
+    created_at: string | null;
+    document_number: string | null;
+    show_url: string;
+    pdf_url: string | null;
+};

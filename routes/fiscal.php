@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Fiscal\EcfAnnulmentController;
+use App\Http\Controllers\Fiscal\EcfCertificationController;
 use App\Http\Controllers\Fiscal\EcfDocumentController;
 use App\Http\Controllers\Fiscal\ReceivedEcfController;
 use Illuminate\Support\Facades\Route;
@@ -17,6 +18,9 @@ Route::middleware(['auth'])->prefix('fiscal')->name('fiscal.')->group(function (
     Route::post('ecf-annulments/ranges', [EcfAnnulmentController::class, 'storeRange'])->name('ecf-annulments.ranges.store');
     Route::delete('ecf-annulments/ranges/{range}', [EcfAnnulmentController::class, 'destroyRange'])->name('ecf-annulments.ranges.destroy');
     Route::post('ecf-annulments/send', [EcfAnnulmentController::class, 'send'])->name('ecf-annulments.send');
+    Route::get('certification', [EcfCertificationController::class, 'index'])->name('certification.index');
+    Route::post('certification/steps', [EcfCertificationController::class, 'steps'])->name('certification.steps');
+    Route::post('certification/resubmit', [EcfCertificationController::class, 'resubmit'])->name('certification.resubmit');
     Route::get('received-ecfs/export', [ReceivedEcfController::class, 'export'])->name('received-ecfs.export');
     Route::get('received-ecfs', [ReceivedEcfController::class, 'index'])->name('received-ecfs.index');
     Route::get('received-ecfs/{receivedEcf}', [ReceivedEcfController::class, 'show'])->name('received-ecfs.show');
