@@ -1,7 +1,7 @@
 @extends('pdf.layout')
 
 @section('document-box')
-@include('pdf.partials.fiscal-box', ['title' => $invoice->ncf_type?->label() ?? 'Factura', 'ncf' => $invoice->ncf, 'expiresOn' => $invoice->ncf_expires_on?->format('d/m/Y'), 'modifiedNcf' => null, 'number' => $invoice->number, 'issueDate' => $invoice->issue_date->format('d/m/Y'), 'dueDate' => $invoice->payment_terms->value === 'credit' ? $invoice->due_date->format('d/m/Y') : null, 'extra' => ['Condición' => $invoice->payment_terms->label(), 'Vendedor' => $invoice->salesperson->name, 'Moneda' => $currency]])
+@include('pdf.partials.fiscal-box', ['title' => $invoice->kind->value === 'historical' ? 'Factura histórica (registrada externamente)' : ($invoice->ncf_type?->label() ?? 'Factura'), 'ncf' => $invoice->ncf, 'expiresOn' => $invoice->ncf_expires_on?->format('d/m/Y'), 'modifiedNcf' => null, 'number' => $invoice->number, 'issueDate' => $invoice->issue_date->format('d/m/Y'), 'dueDate' => $invoice->payment_terms->value === 'credit' ? $invoice->due_date->format('d/m/Y') : null, 'extra' => ['Condición' => $invoice->payment_terms->label(), 'Vendedor' => $invoice->salesperson->name, 'Moneda' => $currency]])
 @if($invoice->status->value === 'cancelled')
 <div style="color:#b00; font-weight:bold; font-size:16px;">ANULADA</div>
 @endif
@@ -13,7 +13,11 @@
 @else
 @include('pdf.partials.client-block', ['client' => $invoice->client])
 @endif
+@if($invoice->kind->value === 'historical')
+<p class="muted">Documento registrado para control de saldos; el comprobante original fue emitido fuera del sistema.</p>
+@else
 @include('pdf.partials.lines-table')
+@endif
 @include('pdf.partials.totals')
 @if(! $invoice->ncf)<p class="muted">Sin valor fiscal.</p>@endif
 @if($invoice->notes)<p class="muted">{{ $invoice->notes }}</p>@endif

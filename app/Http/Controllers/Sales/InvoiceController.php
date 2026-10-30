@@ -7,6 +7,7 @@ use App\Actions\Sales\CancelInvoice;
 use App\Actions\Sales\CreateInvoiceFromProforma;
 use App\Actions\Sales\IssueInvoice;
 use App\Actions\Sales\SaveInvoice;
+use App\Enums\InvoiceKind;
 use App\Enums\InvoiceStatus;
 use App\Enums\PaymentTerms;
 use App\Exceptions\DocumentStateException;
@@ -93,7 +94,7 @@ class InvoiceController extends Controller
                 'cancel' => $user->can('sales.invoices.cancel') && $invoice->isOpen() && $user->can('update', $invoice),
                 'send' => $user->can('sales.invoices.send') && $user->can('update', $invoice),
                 'creditOverride' => $user->can('sales.invoices.credit-override'),
-                'dispatch' => $user->can('inventory.dispatches.create') && $invoice->isOpen() && $invoice->dispatch_status !== 'complete',
+                'dispatch' => $user->can('inventory.dispatches.create') && $invoice->isOpen() && $invoice->dispatch_status !== 'complete' && $invoice->kind !== InvoiceKind::Historical,
                 'creditNote' => $user->can('sales.credit-notes.create') && ($invoice->isOpen() || $invoice->status === InvoiceStatus::Paid),
                 'debitNote' => $user->can('sales.debit-notes.create') && ($invoice->isOpen() || $invoice->status === InvoiceStatus::Paid),
                 'receipt' => $user->can('sales.receipts.create') && $invoice->isOpen(),

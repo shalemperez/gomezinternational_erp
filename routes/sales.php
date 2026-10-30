@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Sales\CreditNoteController;
 use App\Http\Controllers\Sales\DebitNoteController;
+use App\Http\Controllers\Sales\HistoricalInvoiceController;
 use App\Http\Controllers\Sales\InvoiceController;
 use App\Http\Controllers\Sales\ProformaController;
 use App\Http\Controllers\Sales\ReceiptController;
@@ -13,6 +14,8 @@ Route::middleware(['auth'])->prefix('sales')->name('sales.')->group(function () 
     Route::post('totals/preview', TotalsPreviewController::class)->name('totals.preview');
 
     Route::get('invoices/export', [InvoiceController::class, 'export'])->name('invoices.export');
+    Route::get('invoices/historical/create', [HistoricalInvoiceController::class, 'create'])->middleware('permission:sales.historical-invoices.import')->name('invoices.historical.create');
+    Route::post('invoices/historical', [HistoricalInvoiceController::class, 'store'])->middleware('permission:sales.historical-invoices.import')->name('invoices.historical.store');
     Route::post('invoices/{invoice}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue');
     Route::post('invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
     Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');

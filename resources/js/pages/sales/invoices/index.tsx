@@ -22,6 +22,7 @@ import {
 import { formatDate, formatMoney } from '@/lib/format';
 import { useCan } from '@/lib/can';
 import { create, exportMethod, index, show } from '@/routes/sales/invoices';
+import { create as historicalCreate } from '@/routes/sales/invoices/historical';
 import type { Invoice, PickedClient } from '@/types/sales';
 
 type Props = {
@@ -141,6 +142,13 @@ export default function InvoiceIndex({
                                         query: { ...filters, format: 'csv' },
                                     })}
                                 />
+                            )}
+                            {can('sales.historical-invoices.import') && (
+                                <Button variant="outline" asChild>
+                                    <Link href={historicalCreate()}>
+                                        Registrar factura histórica
+                                    </Link>
+                                </Button>
                             )}
                             {can('sales.invoices.create') && (
                                 <Button asChild>
