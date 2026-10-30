@@ -32,6 +32,7 @@ use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class ReceiptController extends Controller
 {
@@ -44,6 +45,8 @@ class ReceiptController extends Controller
         return Inertia::render('sales/receipts/index', [
             'rows' => $rows,
             'filters' => $request->only(['search', 'sort', 'dir', 'per_page', 'client_id', 'status', 'payment_method', 'from', 'to']),
+            'statuses' => array_map(fn (ReceiptStatus $status) => ['value' => $status->value, 'label' => $status->label()], ReceiptStatus::cases()),
+            'paymentMethods' => $this->paymentMethodOptions(),
         ]);
     }
 
@@ -51,11 +54,23 @@ class ReceiptController extends Controller
     public function create(Request $request): Response
     {
         $client = $request->integer('client') > 0
-            ? Client::query()->whereKey($request->integer('client'))->first(['id', 'business_name', 'tax_id', 'currency_id'])
+            ? Client::query()->whereKey($request->integer('client'))->with('currency:id,code')->first()
             : null;
 
         return Inertia::render('sales/receipts/form', [
-            'client' => $client,
+            'client' => $client === null ? null : [
+                'id' => $client->id,
+                'code' => $client->code,
+                'business_name' => $client->business_name,
+                'trade_name' => $client->trade_name,
+                'tax_id' => $client->tax_id,
+                'formatted_tax_id' => $client->getAttribute('formatted_tax_id'),
+                'currency_code' => $client->currency?->code,
+                'price_list_id' => $client->price_list_id,
+                'credit_days' => $client->credit_days,
+                'email' => $client->email,
+                'salesperson_id' => $client->salesperson_id,
+            ],
             'openInvoices' => $client === null ? [] : $this->openInvoices($this->actor($request), $client->id),
             'advances' => $client === null ? [] : Receipt::query()->where('client_id', $client->id)->where('status', ReceiptStatus::Posted)
                 ->where('unapplied_amount', '>', 0)->get(['id', 'number', 'unapplied_amount', 'currency_id']),
@@ -102,6 +117,26 @@ class ReceiptController extends Controller
         $receipt = $applyAdvance->handle($receipt, $applications, $this->actor($request));
 
         return redirect()->route('sales.receipts.show', $receipt)->with('success', 'Anticipo aplicado: '.DocumentPdf::money($applied, $receipt->currency->code));
+    }
+
+    #[Middleware('permission:sales.receipts.view')]
+    public function pdf(Receipt $receipt, DocumentPdf $pdf): SymfonyResponse
+    {
+        Gate::authorize('view', $receipt);
+        activity('receipts')->performedOn($receipt)->event('pdf_generated')->log("PDF de {$receipt->number} generado");
+
+        return $pdf->stream('pdf.sales.receipt', $this->pdfData($receipt), $receipt->number.'.pdf');
+    }
+
+    /** @return array<string, mixed> */
+    public function pdfData(Receipt $receipt): array
+    {
+        $receipt->load('applications.invoice', 'client', 'currency', 'financialAccount');
+
+        return [
+            'receipt' => $receipt,
+            'currency' => $receipt->currency->code,
+        ];
     }
 
     #[Middleware('permission:sales.receipts.cancel')]

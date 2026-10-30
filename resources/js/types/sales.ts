@@ -271,3 +271,58 @@ export type DebitNote = DocumentTotals & {
     currency?: { id: number; code: string } | null;
     lines?: DebitNoteLine[];
 };
+export type OpenInvoiceRow = {
+    id: number;
+    number: string;
+    ncf: string | null;
+    issue_date: string;
+    due_date: string;
+    total: string;
+    itbis_total: string;
+    taxable_total: string;
+    balance: string;
+    currency_id: number;
+};
+export type ReceiptApplication = {
+    id: number;
+    receipt_id: number;
+    invoice_id: number;
+    amount: string;
+    source: string;
+    invoice?: {
+        id: number;
+        number: string;
+        ncf: string | null;
+        balance: string;
+    } | null;
+};
+export type Receipt = {
+    id: number;
+    number: string;
+    status: string;
+    status_label: string;
+    payment_method: string;
+    payment_method_label: string;
+    client_id: number;
+    salesperson_id: number | null;
+    currency_id: number;
+    exchange_rate: string;
+    receipt_date: string;
+    financial_account_id: number | null;
+    reference: string | null;
+    amount_received: string;
+    retention_itbis: string;
+    retention_isr: string;
+    applied_total: string;
+    unapplied_amount: string;
+    notes: string | null;
+    posted_at: string | null;
+    cancelled_at: string | null;
+    cancel_reason: string | null;
+    client?: { id: number; business_name: string } | null;
+    salesperson?: { id: number; name: string } | null;
+    currency?: { id: number; code: string } | null;
+    financialAccount?: { id: number; name: string } | null;
+    canceller?: { id: number; name: string } | null;
+    applications?: ReceiptApplication[];
+};

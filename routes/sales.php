@@ -28,6 +28,7 @@ Route::middleware(['auth'])->prefix('sales')->name('sales.')->group(function () 
     Route::resource('debit-notes', DebitNoteController::class)->only(['index', 'create', 'store', 'show'])->parameters(['debit-notes' => 'debitNote']);
 
     Route::get('receipts/export', [ReceiptController::class, 'export'])->name('receipts.export');
+    Route::get('receipts/{receipt}/pdf', [ReceiptController::class, 'pdf'])->name('receipts.pdf');
     Route::post('receipts/{receipt}/cancel', [ReceiptController::class, 'cancel'])->name('receipts.cancel');
     Route::post('receipts/{receipt}/apply', [ReceiptController::class, 'apply'])->name('receipts.apply');
     Route::resource('receipts', ReceiptController::class)->only(['index', 'create', 'store', 'show']);

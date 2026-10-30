@@ -41,6 +41,10 @@ import {
     pdf,
     send,
 } from '@/routes/sales/invoices';
+import {
+    create as createReceipt,
+    show as showReceipt,
+} from '@/routes/sales/receipts';
 import type { AuditEntry } from '@/types/audit';
 import type {
     ComputedTotals,
@@ -60,6 +64,14 @@ type Props = {
         status_label: string;
         dispatch_date: string;
     }[];
+    applications: {
+        id: number;
+        receipt_id: number;
+        receipt_number: string;
+        receipt_date: string;
+        amount: string;
+        source: string;
+    }[];
     can: {
         dispatch: boolean;
         update: boolean;
@@ -70,6 +82,7 @@ type Props = {
         creditOverride: boolean;
         creditNote: boolean;
         debitNote: boolean;
+        receipt: boolean;
     };
 };
 
@@ -83,6 +96,7 @@ export default function InvoiceShow({
     history,
     emails,
     dispatches,
+    applications,
     can: abilities,
 }: Props) {
     const { url } = usePage();
@@ -220,6 +234,20 @@ export default function InvoiceShow({
                     </Link>
                 </Button>
             )}
+            {abilities.receipt && (
+                <Button variant="outline" asChild>
+                    <Link
+                        href={createReceipt.url({
+                            query: {
+                                client: invoice.client_id,
+                                invoice: invoice.id,
+                            },
+                        })}
+                    >
+                        Registrar cobro
+                    </Link>
+                </Button>
+            )}
             {abilities.delete && (
                 <ConfirmDelete
                     url={destroy.url(invoice.id)}
@@ -284,6 +312,7 @@ export default function InvoiceShow({
                     <TabsList>
                         <TabsTrigger value="lineas">Líneas</TabsTrigger>
                         <TabsTrigger value="conduces">Conduces</TabsTrigger>
+                        <TabsTrigger value="cobros">Cobros</TabsTrigger>
                         <TabsTrigger value="correos">Correos</TabsTrigger>
                         <TabsTrigger value="historial">Historial</TabsTrigger>
                     </TabsList>
@@ -377,6 +406,68 @@ export default function InvoiceShow({
                                                 className="p-4 text-center text-muted-foreground"
                                             >
                                                 Sin conduces
+                                            </td>
+                                        </tr>
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="cobros" className="pt-4">
+                        <div className="rounded-md border">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b text-left">
+                                        <th className="p-2">Cobro</th>
+                                        <th className="p-2">Fecha</th>
+                                        <th className="p-2">Origen</th>
+                                        <th className="p-2 text-right">
+                                            Monto aplicado
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {applications.map((application) => (
+                                        <tr
+                                            key={application.id}
+                                            className="border-b"
+                                        >
+                                            <td className="p-2">
+                                                <Link
+                                                    className="font-mono underline"
+                                                    href={showReceipt.url(
+                                                        application.receipt_id,
+                                                    )}
+                                                >
+                                                    {application.receipt_number}
+                                                </Link>
+                                            </td>
+                                            <td className="p-2">
+                                                {formatDate(
+                                                    application.receipt_date,
+                                                )}
+                                            </td>
+                                            <td className="p-2">
+                                                {application.source ===
+                                                'advance'
+                                                    ? 'Anticipo'
+                                                    : 'Cobro'}
+                                            </td>
+                                            <td className="p-2 text-right">
+                                                {formatMoney(
+                                                    application.amount,
+                                                    currency,
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {applications.length === 0 && (
+                                        <tr>
+                                            <td
+                                                colSpan={4}
+                                                className="p-4 text-center text-muted-foreground"
+                                            >
+                                                Sin cobros aplicados
                                             </td>
                                         </tr>
                                     )}

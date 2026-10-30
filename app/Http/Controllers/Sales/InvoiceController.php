@@ -22,6 +22,7 @@ use App\Models\Dispatch;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Proforma;
+use App\Models\ReceiptApplication;
 use App\Models\Salesperson;
 use App\Models\SentEmail;
 use App\Models\User;
@@ -84,6 +85,7 @@ class InvoiceController extends Controller
             'history' => AuditHistory::for($invoice),
             'emails' => $this->emailRows($invoice),
             'dispatches' => $this->dispatchRows($invoice),
+            'applications' => $this->applicationRows($invoice),
             'can' => [
                 'update' => $user->can('sales.invoices.update') && $invoice->isDraft() && $user->can('update', $invoice),
                 'delete' => $user->can('sales.invoices.delete') && $invoice->isDraft() && $user->can('delete', $invoice),
@@ -348,6 +350,20 @@ class InvoiceController extends Controller
                 'salesperson_id' => $invoice->client->salesperson_id,
             ],
         ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function applicationRows(Invoice $invoice): array
+    {
+        return ReceiptApplication::query()->where('invoice_id', $invoice->id)->with('receipt:id,number,receipt_date')->orderByDesc('id')->get()
+            ->map(fn (ReceiptApplication $application) => [
+                'id' => $application->id,
+                'receipt_id' => $application->receipt_id,
+                'receipt_number' => $application->receipt->number,
+                'receipt_date' => $application->receipt->receipt_date->toDateString(),
+                'amount' => $application->amount,
+                'source' => $application->source,
+            ])->values()->all();
     }
 
     /** @return array<int, array<string, mixed>> */
