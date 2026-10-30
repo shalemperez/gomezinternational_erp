@@ -7,6 +7,15 @@ use Illuminate\Validation\Validator;
 
 class UpdateNcfSequenceRequest extends StoreNcfSequenceRequest
 {
+    protected function prepareForValidation(): void
+    {
+        parent::prepareForValidation();
+        $sequence = $this->route('ncfSequence');
+        if ($sequence instanceof NcfSequence) {
+            $this->merge(['environment' => $sequence->environment]);
+        }
+    }
+
     public function withValidator(Validator $validator): void
     {
         parent::withValidator($validator);

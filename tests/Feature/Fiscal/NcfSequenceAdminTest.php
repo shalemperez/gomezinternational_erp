@@ -5,6 +5,7 @@ use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Notifications\NcfSequenceAlert;
 use App\Services\Fiscal\SequenceAlerts;
+use App\Services\Settings;
 use Illuminate\Support\Facades\Notification;
 use Spatie\Activitylog\Models\Activity;
 
@@ -97,4 +98,12 @@ test('a sequence range cannot include ncfs already used by invoices outside it',
     $seq = NcfSequence::firstOrFail();
     Invoice::factory()->create(['status' => 'issued', 'fiscal_mode' => 'ncf', 'ncf' => 'B0100000124', 'ncf_type' => 'B01', 'ncf_sequence_id' => $seq->id, 'issued_at' => now()]);
     $this->put(route('admin.ncf-sequences.update', $seq), validNcfSequencePayload(['range_from' => 124, 'range_to' => 300]))->assertRedirect(route('admin.ncf-sequences.index')); // its own NCFs do not collide
+});
+
+test('editing an electronic sequence keeps its environment', function () {
+    actingAsRole('owner');
+    app(Settings::class)->set('ecf.environment', 'prod');
+    $seq = activeSequence('E31', ['environment' => 'cert', 'range_from' => 1, 'range_to' => 100, 'next_number' => 1]);
+    $this->put(route('admin.ncf-sequences.update', $seq), validNcfSequencePayload(['ncf_type' => 'E31', 'range_from' => 1, 'range_to' => 200, 'is_active' => '0']))->assertRedirect(route('admin.ncf-sequences.index'));
+    expect($seq->fresh()->environment)->toBe('cert')->and($seq->fresh()->range_to)->toBe(200);
 });

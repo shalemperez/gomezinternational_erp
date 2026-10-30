@@ -53,7 +53,7 @@ class IssueDebitNote
             $fiscal = $this->numbering->assign($this->resolver->forDebitNote(), $issueDate);
             $note = DebitNote::query()->create([
                 'number' => $this->documentNumbering->next(DocumentKind::DebitNote),
-                'fiscal_mode' => $this->numbering->mode(),
+                'fiscal_mode' => $fiscal->type->isElectronic() ? 'ecf' : 'ncf',
                 'ncf' => $fiscal->ncf,
                 'ncf_type' => $fiscal->type,
                 'ncf_expires_on' => $fiscal->expiresOn?->toDateString(),

@@ -85,7 +85,7 @@ class IssueInvoice
                 'ncf_type' => $fiscal->type,
                 'ncf_expires_on' => $fiscal->expiresOn?->toDateString(),
                 'ncf_sequence_id' => $fiscal->sequenceId,
-                'fiscal_mode' => $this->numbering->mode(),
+                'fiscal_mode' => $fiscal->type->isElectronic() ? 'ecf' : 'ncf',
                 'client_name' => $invoice->client->business_name,
                 'client_tax_id' => $invoice->client->tax_id,
                 'client_tax_id_type' => $invoice->client->tax_id_type->value,
