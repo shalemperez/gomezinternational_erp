@@ -15,8 +15,10 @@ use App\Models\Proforma;
 use App\Models\ProformaLine;
 use App\Models\User;
 use App\Services\Accounting\AccountingEventRecorder;
+use App\Services\Documents\DocumentCurrency;
 use App\Services\Documents\DocumentLines;
 use App\Services\Documents\DocumentNumbering;
+use App\Services\Documents\DocumentPdf;
 use App\Services\Documents\DocumentTotalsCalculator;
 use App\Services\Fiscal\FiscalNumberingService;
 use App\Services\Fiscal\NcfTypeResolver;
@@ -58,6 +60,9 @@ class IssueInvoice
                 throw new DocumentStateException('El modo fiscal e-CF se habilita en la fase 3');
             }
 
+            $issueDate = CarbonImmutable::today();
+            ['exchange_rate' => $rate] = DocumentCurrency::resolve($invoice->currency_id, $issueDate);
+            $invoice->exchange_rate = $rate;
             $computed = $this->calculator->compute(array_values($invoice->lines->map(fn (InvoiceLine $line) => new LineInput($line->product_id, $line->quantity, $line->unit_price, $line->discount_percent, $line->description))->all()));
             $totals = DocumentLines::totals($computed, $invoice->exchange_rate);
             $type = $this->resolver->forSale($invoice->client);
@@ -70,11 +75,11 @@ class IssueInvoice
                 $this->inventory->reserve($line, $line->product_id, (int) $invoice->warehouse_id, $line->quantity);
             }
 
-            $issueDate = CarbonImmutable::today();
             $dueDate = $issueDate->addDays($invoice->payment_terms === PaymentTerms::Cash ? 0 : $invoice->credit_days);
             $fiscal = $this->numbering->assign($type, $issueDate);
             $invoice->forceFill([
                 ...$totals,
+                'exchange_rate' => $rate,
                 'number' => $this->documentNumbering->next(DocumentKind::Invoice),
                 'ncf' => $fiscal->ncf,
                 'ncf_type' => $fiscal->type,
@@ -120,7 +125,14 @@ class IssueInvoice
         $proforma = Proforma::query()->whereKey($invoice->proforma_id)->lockForUpdate()->with('lines')->firstOrFail();
         foreach ($invoice->lines()->whereNotNull('proforma_line_id')->get() as $line) {
             $proformaLine = $proforma->lines->firstWhere('id', $line->proforma_line_id);
-            $proformaLine?->forceFill(['invoiced_quantity' => Decimal::qty(Decimal::of($proformaLine->invoiced_quantity)->plus(Decimal::of($line->quantity)))])->save();
+            if ($proformaLine === null) {
+                continue;
+            }
+            $pending = Decimal::qty(Decimal::of($proformaLine->quantity)->minus(Decimal::of($proformaLine->invoiced_quantity)));
+            if (Decimal::cmp($line->quantity, $pending) > 0) {
+                throw new DocumentStateException("La proforma {$proforma->number} solo tiene pendiente {$pending} de la línea {$proformaLine->line_number}.");
+            }
+            $proformaLine->forceFill(['invoiced_quantity' => Decimal::qty(Decimal::of($proformaLine->invoiced_quantity)->plus(Decimal::of($line->quantity)))])->save();
         }
         if ($proforma->lines->every(fn (ProformaLine $line) => Decimal::cmp($line->invoiced_quantity, $line->quantity) >= 0)) {
             $proforma->forceFill(['status' => ProformaStatus::Invoiced, 'invoiced_at' => now()])->save();
@@ -134,7 +146,7 @@ class IssueInvoice
     {
         $threshold = Decimal::money((string) $this->settings->get('fiscal.consumo_id_threshold', '250000.00'));
         if ($type === NcfType::B02 && Decimal::cmp($totalBase, $threshold) >= 0 && blank($client->tax_id)) {
-            throw new DocumentStateException('Las facturas de consumo desde RD$ '.number_format((float) $threshold, 2).' requieren el RNC o cédula del comprador (Norma General 10-2018).');
+            throw new DocumentStateException('Las facturas de consumo desde RD$ '.DocumentPdf::number($threshold).' requieren el RNC o cédula del comprador (Norma General 10-2018).');
         }
     }
 

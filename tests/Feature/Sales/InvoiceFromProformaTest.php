@@ -3,6 +3,7 @@
 use App\Actions\Sales\CancelInvoice;
 use App\Actions\Sales\CreateInvoiceFromProforma;
 use App\Actions\Sales\IssueInvoice;
+use App\Enums\InvoiceStatus;
 use App\Enums\ProformaStatus;
 use App\Enums\StockMovementType;
 use App\Exceptions\DocumentStateException;
@@ -104,4 +105,21 @@ test('the conversion re-checks pending quantities under the lock', function () {
     expect(fn () => app(CreateInvoiceFromProforma::class)->handle($p, [$line->id => '1'], $actor))
         ->toThrow(DocumentStateException::class, 'Cantidad pendiente: 0.0000.');
     expect(Invoice::count())->toBe(0);
+});
+
+test('issuing refuses a draft whose proforma pending quantity was consumed meanwhile', function () {
+    $user = actingAsRole('owner');
+    activeSequence('B01', ['range_to' => 1000]);
+    $p = Proforma::factory()->approved()->withLines(1)->create();
+    $line = $p->lines->first();
+    $this->post(route('sales.proformas.invoice', $p), ['quantities' => [$line->id => '1']])->assertRedirect();
+    $draft = Invoice::firstOrFail();
+    foreach ($draft->lines as $draftLine) {
+        app(InventoryService::class)->receive(new StockLine($draftLine->product_id, (int) $draft->warehouse_id, '100', '50'), StockMovementType::Initial, $user, $user);
+    }
+    $line->forceFill(['invoiced_quantity' => $line->quantity])->save(); // another invoice issued meanwhile
+
+    $this->post(route('sales.invoices.issue', $draft), [])->assertRedirect()
+        ->assertSessionHas('error', fn (string $m) => str_contains($m, 'solo tiene pendiente'));
+    expect($draft->fresh()->issued_at)->toBeNull()->and($draft->fresh()->status)->toBe(InvoiceStatus::Draft);
 });

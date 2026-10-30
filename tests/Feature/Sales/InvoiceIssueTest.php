@@ -8,8 +8,10 @@ use App\Exceptions\DocumentStateException;
 use App\Exceptions\ImmutableDocumentException;
 use App\Models\AccountingEvent;
 use App\Models\Client;
+use App\Models\Currency;
 use App\Models\Dispatch;
 use App\Models\DocumentSequence;
+use App\Models\ExchangeRate;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\NcfSequence;
@@ -196,4 +198,18 @@ test('paid invoices keep the dispatch action until fully dispatched', function (
     $this->get(route('sales.invoices.show', $i))->assertOk()->assertInertia(fn ($p) => $p->where('can.dispatch', true)->where('can.receipt', false));
     $i->forceFill(['dispatch_status' => 'complete'])->save();
     $this->get(route('sales.invoices.show', $i))->assertOk()->assertInertia(fn ($p) => $p->where('can.dispatch', false));
+});
+
+test('a foreign-currency draft is issued at the exchange rate of the issue date', function () {
+    $user = actingAsRole('accounting');
+    activeSequence('B01', ['range_to' => 10]);
+    $usd = Currency::query()->where('code', 'USD')->firstOrFail();
+    ExchangeRate::factory()->create(['currency_id' => $usd->id, 'rate_date' => now()->subDays(10)->toDateString(), 'rate' => '58.000000']);
+    ExchangeRate::factory()->create(['currency_id' => $usd->id, 'rate_date' => now()->toDateString(), 'rate' => '60.000000']);
+    $draft = draftFor(['currency_id' => $usd->id, 'issue_date' => now()->subDays(10)->toDateString(), 'salesperson_id' => $this->sp->id], $user);
+    expect($draft->fresh()->exchange_rate)->toBe('58.000000')->and($draft->fresh()->total_base)->toBe('13688.00');
+
+    app(IssueInvoice::class)->handle($draft, $user);
+    $i = $draft->fresh();
+    expect($i->exchange_rate)->toBe('60.000000')->and($i->total)->toBe('236.00')->and($i->total_base)->toBe('14160.00');
 });
