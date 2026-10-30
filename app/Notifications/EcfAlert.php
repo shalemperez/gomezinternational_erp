@@ -3,11 +3,12 @@
 namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 use Illuminate\Support\Carbon;
 
-class EcfAlert extends Notification
+class EcfAlert extends Notification implements ShouldQueue
 {
     use Queueable;
 
@@ -15,7 +16,10 @@ class EcfAlert extends Notification
      * @param  list<array{encf: string, number: string, created_at: string, urgent: bool}>  $pending
      * @param  list<array{encf: string, number: string, message: string}>  $rejected
      */
-    public function __construct(public readonly array $pending, public readonly array $rejected) {}
+    public function __construct(public readonly array $pending, public readonly array $rejected)
+    {
+        $this->afterCommit();
+    }
 
     /** @return list<string> */
     public function via(object $notifiable): array

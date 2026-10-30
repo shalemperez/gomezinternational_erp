@@ -18,7 +18,7 @@ class CheckEcfAlerts implements ShouldQueue
 
     public function handle(EcfService $ecf): void
     {
-        $pending = array_values(EcfDocument::query()
+        $pending = array_values(EcfDocument::query()->with('document')
             ->whereIn('status', [EcfStatus::Pending->value, EcfStatus::Signed->value, EcfStatus::Sent->value, EcfStatus::InProcess->value])
             ->where('created_at', '<=', now()->subHours((int) config('ecf.pending_alert_hours')))
             ->get()
@@ -29,7 +29,7 @@ class CheckEcfAlerts implements ShouldQueue
                 'urgent' => $document->created_at->lte(now()->subHours(48)),
             ])->all());
 
-        $rejected = array_values(EcfDocument::query()->where('status', EcfStatus::Rejected->value)->where('rejected_at', '>=', now()->subHours(24))
+        $rejected = array_values(EcfDocument::query()->with('document')->where('status', EcfStatus::Rejected->value)->where('rejected_at', '>=', now()->subHours(24))
             ->get()
             ->map(fn (EcfDocument $document) => [
                 'encf' => $document->encf,
@@ -43,6 +43,10 @@ class CheckEcfAlerts implements ShouldQueue
             return;
         }
 
-        Notification::send($ecf->alertRecipients(), new EcfAlert($pending, $rejected));
+        try {
+            Notification::send($ecf->alertRecipients(), new EcfAlert($pending, $rejected));
+        } catch (\Throwable $exception) {
+            report($exception);
+        }
     }
 }

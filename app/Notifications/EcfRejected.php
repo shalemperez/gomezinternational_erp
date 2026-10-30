@@ -4,14 +4,18 @@ namespace App\Notifications;
 
 use App\Models\EcfDocument;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
-class EcfRejected extends Notification
+class EcfRejected extends Notification implements ShouldQueue
 {
     use Queueable;
 
-    public function __construct(public readonly EcfDocument $document) {}
+    public function __construct(public readonly EcfDocument $document)
+    {
+        $this->afterCommit();
+    }
 
     /** @return list<string> */
     public function via(object $notifiable): array

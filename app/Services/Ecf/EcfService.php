@@ -159,7 +159,11 @@ class EcfService
             ->log($result->status->label());
 
         if ($result->status === EcfStatus::Rejected) {
-            Notification::send($this->alertRecipients(), new EcfRejected($ecfDocument));
+            try {
+                Notification::send($this->alertRecipients(), new EcfRejected($ecfDocument));
+            } catch (Throwable $exception) {
+                report($exception);
+            }
         }
     }
 

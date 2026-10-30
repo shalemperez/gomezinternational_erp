@@ -16,6 +16,7 @@ use App\Support\Fiscal\FiscalNumber;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DocumentSequenceSeeder;
 use Illuminate\Console\Scheduling\Schedule;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
@@ -108,4 +109,27 @@ test('the schedule registers the e-cf sweep every five minutes and the alerts da
     $events = collect(app(Schedule::class)->events());
     expect($events->contains(fn ($e) => str_contains((string) $e->description, 'RetryPendingEcfDocuments') && $e->expression === '*/5 * * * *'))->toBeTrue()
         ->and($events->contains(fn ($e) => str_contains((string) $e->description, 'CheckEcfAlerts') && $e->expression === '40 7 * * *'))->toBeTrue();
+});
+
+test('a failing mail transport does not mark a rejected e-cf as failed', function () {
+    $doc = ecfDocFor('rejected');
+    Notification::shouldReceive('send')->andThrow(new RuntimeException('smtp down'));
+    (new SubmitEcfDocument($doc))->handle(app(EcfService::class));
+    expect($doc->fresh()->status)->toBe(EcfStatus::Rejected)->and($doc->fresh()->last_error)->toBeNull()->and($doc->fresh()->attempts)->toBe(1);
+});
+
+test('submit and poll jobs are unique per document', function () {
+    $doc = ecfDocFor('in_process');
+    expect(new SubmitEcfDocument($doc))->toBeInstanceOf(ShouldBeUnique::class)
+        ->and((new SubmitEcfDocument($doc))->uniqueId())->toBe((string) $doc->id)
+        ->and(new PollEcfStatus($doc))->toBeInstanceOf(ShouldBeUnique::class)
+        ->and((new PollEcfStatus($doc))->uniqueId())->toBe((string) $doc->id);
+});
+
+test('retries are exhausted after the maximum attempts', function () {
+    config(['ecf.max_attempts' => 1]);
+    $doc = ecfDocFor('unavailable');
+    (new SubmitEcfDocument($doc))->handle(app(EcfService::class));
+    expect($doc->fresh()->next_attempt_at)->toBeNull()
+        ->and(Activity::inLog('ecf_documents')->where('subject_id', $doc->id)->where('event', 'retries_exhausted')->exists())->toBeTrue();
 });
