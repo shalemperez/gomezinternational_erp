@@ -7,6 +7,7 @@ use App\Models\ActivityLog;
 use App\Models\User;
 use App\Services\Settings;
 use Carbon\CarbonImmutable;
+use Illuminate\Http\Middleware\TrustProxies;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -35,6 +36,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        self::configureTrustedProxies();
 
         Gate::before(fn (User $user, string $ability) => $user->isSuperAdmin() ? true : null);
 
@@ -55,6 +57,18 @@ class AppServiceProvider extends ServiceProvider
         });
 
         Event::listen([RoleAttachedEvent::class, RoleDetachedEvent::class, PermissionAttachedEvent::class, PermissionDetachedEvent::class], LogAccessChanges::class);
+    }
+
+    /**
+     * Trust the X-Forwarded-* headers only from the proxies listed in config('erp.trusted_proxies').
+     */
+    public static function configureTrustedProxies(): void
+    {
+        TrustProxies::flushState();
+        $trusted = (string) config('erp.trusted_proxies');
+        if ($trusted !== '') {
+            TrustProxies::at($trusted === '*' ? '*' : array_map('trim', explode(',', $trusted)));
+        }
     }
 
     /**

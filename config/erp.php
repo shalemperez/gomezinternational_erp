@@ -10,6 +10,9 @@ return [
         explode(',', (string) env('SUPER_ADMIN_EMAILS', ''))
     ))),
 
+    // Comma-separated proxy IPs/CIDRs (or "*") whose X-Forwarded-* headers are trusted; empty trusts none.
+    'trusted_proxies' => trim((string) env('TRUSTED_PROXIES', '')),
+
     'exchange_rates' => [
         'fetch_time' => '08:30', // app timezone
     ],
