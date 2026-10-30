@@ -31,6 +31,7 @@ use App\Models\SentEmail;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Documents\DocumentPdf;
+use App\Services\Ecf\EcfPdfData;
 use App\Services\Settings;
 use App\Support\AuditHistory;
 use App\Support\TableQuery;
@@ -255,11 +256,12 @@ class InvoiceController extends Controller
     /** @return array<string, mixed> */
     public function pdfData(Invoice $invoice): array
     {
-        $invoice->load('lines.product', 'client', 'salesperson', 'currency');
+        $invoice->load('lines.product.unit', 'client', 'salesperson', 'currency');
 
         return [
             'invoice' => $invoice,
-            'lines' => $invoice->lines->map(fn (InvoiceLine $line) => $line->toArray())->values()->all(),
+            'lines' => $invoice->lines->map(fn (InvoiceLine $line) => [...$line->toArray(), 'unit' => $line->product?->unit?->name])->values()->all(),
+            'ecf' => EcfPdfData::for($invoice),
             'totals' => [
                 'subtotal' => $invoice->subtotal,
                 'discount_total' => $invoice->discount_total,

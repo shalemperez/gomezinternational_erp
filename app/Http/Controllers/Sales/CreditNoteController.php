@@ -16,6 +16,7 @@ use App\Models\Lot;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Documents\DocumentPdf;
+use App\Services\Ecf\EcfPdfData;
 use App\Support\AuditHistory;
 use App\Support\Money\Decimal;
 use App\Support\TableQuery;
@@ -141,11 +142,12 @@ class CreditNoteController extends Controller
     /** @return array<string, mixed> */
     public function pdfData(CreditNote $creditNote): array
     {
-        $creditNote->load('lines', 'invoice', 'currency');
+        $creditNote->load('lines.product.unit', 'invoice', 'currency');
 
         return [
             'creditNote' => $creditNote,
-            'lines' => $creditNote->lines->map(fn ($line) => $line->toArray())->values()->all(),
+            'lines' => $creditNote->lines->map(fn ($line) => [...$line->toArray(), 'unit' => $line->product?->unit?->name])->values()->all(),
+            'ecf' => EcfPdfData::for($creditNote),
             'totals' => [
                 'subtotal' => $creditNote->subtotal,
                 'discount_total' => $creditNote->discount_total,

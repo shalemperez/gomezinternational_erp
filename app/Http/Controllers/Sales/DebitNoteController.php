@@ -12,6 +12,7 @@ use App\Models\DebitNote;
 use App\Models\Invoice;
 use App\Models\User;
 use App\Services\Documents\DocumentPdf;
+use App\Services\Ecf\EcfPdfData;
 use App\Support\AuditHistory;
 use App\Support\TableQuery;
 use Illuminate\Database\Eloquent\Builder;
@@ -115,11 +116,12 @@ class DebitNoteController extends Controller
     /** @return array<string, mixed> */
     public function pdfData(DebitNote $debitNote): array
     {
-        $debitNote->load('lines', 'invoice', 'currency');
+        $debitNote->load('lines.product.unit', 'invoice', 'currency');
 
         return [
             'debitNote' => $debitNote,
-            'lines' => $debitNote->lines->map(fn ($line) => $line->toArray())->values()->all(),
+            'lines' => $debitNote->lines->map(fn ($line) => [...$line->toArray(), 'unit' => $line->product?->unit?->name])->values()->all(),
+            'ecf' => EcfPdfData::for($debitNote),
             'totals' => [
                 'subtotal' => $debitNote->subtotal,
                 'discount_total' => $debitNote->discount_total,

@@ -83,7 +83,7 @@ class EcfDocumentBuilder
             reference: new EcfReference(
                 ncfModificado: (string) $invoice->ncf,
                 fechaNcfModificado: $originalDate,
-                codigoModificacion: Decimal::cmp($note->total, Decimal::sum([$invoice->total, $invoice->debited_amount])) === 0 ? 1 : 3,
+                codigoModificacion: self::modificationCode($note),
                 razonModificacion: mb_substr($note->reason->label(), 0, 90),
             ),
             indicadorNotaCredito: $type === NcfType::E34 ? $this->indicadorNotaCredito($originalDate, $issueDate) : null,
@@ -112,11 +112,34 @@ class EcfDocumentBuilder
             reference: new EcfReference(
                 ncfModificado: (string) $invoice->ncf,
                 fechaNcfModificado: CarbonImmutable::instance($invoice->issue_date),
-                codigoModificacion: 3,
+                codigoModificacion: self::modificationCode($note),
                 razonModificacion: mb_substr($note->reason->label(), 0, 90),
             ),
             indicadorNotaCredito: null,
         );
+    }
+
+    /** Rule 8: a credit note for the whole invoice amount is 1 (anula), any other credit note is 3; debit notes are always 3. */
+    public static function modificationCode(CreditNote|DebitNote $note): int
+    {
+        if ($note instanceof DebitNote) {
+            return 3;
+        }
+
+        $invoice = $note->invoice;
+
+        return Decimal::cmp($note->total, Decimal::sum([$invoice->total, $invoice->debited_amount])) === 0 ? 1 : 3;
+    }
+
+    public static function modificationLabel(int $code): string
+    {
+        return match ($code) {
+            1 => 'Anula el NCF modificado',
+            2 => 'Corrige texto del comprobante fiscal modificado',
+            3 => 'Corrige montos del NCF modificado',
+            4 => 'Reemplazo NCF emitido en contingencia',
+            default => throw new \InvalidArgumentException("Código de modificación desconocido: {$code}"),
+        };
     }
 
     /**

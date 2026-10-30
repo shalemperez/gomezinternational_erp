@@ -11,6 +11,7 @@ use App\Models\Contracts\HasDocumentLines;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -98,6 +99,12 @@ class DebitNote extends Model implements HasDocumentLines
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** @return MorphOne<EcfDocument, $this> */
+    public function ecfDocument(): MorphOne
+    {
+        return $this->morphOne(EcfDocument::class, 'document');
     }
 
     /** @return HasMany<DebitNoteLine, $this> */
