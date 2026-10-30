@@ -11,6 +11,7 @@ use App\Models\DebitNote;
 use App\Models\EcfDocument;
 use App\Models\Invoice;
 use App\Models\User;
+use App\Services\Ecf\Providers\DgiiDirectProvider;
 use App\Services\Ecf\Providers\FakeEcfProvider;
 use App\Services\Settings;
 use App\Support\Ecf\EcfDocumentData;
@@ -48,6 +49,7 @@ class EcfService
 
         return match ($name) {
             'fake' => app(FakeEcfProvider::class),
+            'dgii' => app(DgiiDirectProvider::class),
             default => throw new EcfException("Proveedor e-CF no soportado: {$name}"),
         };
     }
