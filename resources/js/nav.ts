@@ -15,6 +15,7 @@ import {
     FileText,
     HandCoins,
     Hash,
+    Inbox,
     LayoutGrid,
     Layers,
     Mail,
@@ -211,6 +212,12 @@ export const navGroups: NavGroup[] = [
                 href: '/fiscal/ecf-documents',
                 icon: FileBadge,
                 permission: 'fiscal.ecf.view',
+            },
+            {
+                title: 'e-CF recibidos',
+                href: '/fiscal/received-ecfs',
+                icon: Inbox,
+                permission: 'fiscal.received-ecf.view',
             },
             {
                 title: 'Anulación de e-NCF',

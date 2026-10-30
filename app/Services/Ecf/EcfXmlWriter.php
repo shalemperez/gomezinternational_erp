@@ -115,6 +115,44 @@ class EcfXmlWriter
         return $document;
     }
 
+    /** Writes the signed-later acuse de recibo (ARECF) that the buyer returns for a received e-CF. */
+    public function writeArecf(string $rncEmisor, string $rncComprador, string $encf, int $estado, ?int $motivo, CarbonImmutable $fechaHora): DOMDocument
+    {
+        $document = $this->newDocument();
+        $root = $this->element($document, $document, 'ARECF');
+
+        $detail = $this->element($document, $root, 'DetalleAcusedeRecibo');
+        $this->text($document, $detail, 'Version', self::VERSION);
+        $this->text($document, $detail, 'RNCEmisor', $rncEmisor);
+        $this->text($document, $detail, 'RNCComprador', $rncComprador);
+        $this->text($document, $detail, 'eNCF', $encf);
+        $this->text($document, $detail, 'Estado', (string) $estado);
+        $this->text($document, $detail, 'CodigoMotivoNoRecibido', $motivo === null ? null : (string) $motivo);
+        $this->text($document, $detail, 'FechaHoraAcuseRecibo', $fechaHora->setTimezone(self::TIMEZONE)->format('d-m-Y H:i:s'));
+
+        return $document;
+    }
+
+    /** Writes the commercial approval (ACECF) that a buyer sends about one of our e-CF; the motivo is the rejection detail. */
+    public function writeAcecf(string $rncEmisor, string $encf, CarbonImmutable $fechaEmision, string $montoTotal, string $rncComprador, int $estado, ?string $motivo, CarbonImmutable $fechaHora): DOMDocument
+    {
+        $document = $this->newDocument();
+        $root = $this->element($document, $document, 'ACECF');
+
+        $detail = $this->element($document, $root, 'DetalleAprobacionComercial');
+        $this->text($document, $detail, 'Version', self::VERSION);
+        $this->text($document, $detail, 'RNCEmisor', $rncEmisor);
+        $this->text($document, $detail, 'eNCF', $encf);
+        $this->text($document, $detail, 'FechaEmision', $fechaEmision->format('d-m-Y'));
+        $this->text($document, $detail, 'MontoTotal', $montoTotal);
+        $this->text($document, $detail, 'RNCComprador', $rncComprador);
+        $this->text($document, $detail, 'Estado', (string) $estado);
+        $this->text($document, $detail, 'DetalleMotivoRechazo', $motivo);
+        $this->text($document, $detail, 'FechaHoraAprobacionComercial', $fechaHora->setTimezone(self::TIMEZONE)->format('d-m-Y H:i:s'));
+
+        return $document;
+    }
+
     private function encf(NcfType $type, int $number): string
     {
         return $type->value.str_pad((string) $number, $type->sequenceDigits(), '0', STR_PAD_LEFT);

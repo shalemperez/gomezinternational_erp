@@ -21,6 +21,9 @@ use App\Services\Ecf\XmlSigner;
 use App\Services\Inventory\InventoryService;
 use App\Services\Settings;
 use App\Support\Ecf\EcfDocumentData;
+use App\Support\Ecf\EcfItem;
+use App\Support\Ecf\EcfParty;
+use App\Support\Ecf\EcfTotals;
 use App\Support\FiscalId;
 use App\Support\Inventory\StockLine;
 use Carbon\CarbonImmutable;
@@ -279,6 +282,37 @@ function signedEcfXml(EcfDocumentData $data): DOMDocument
     $doc->loadXML($signed->xml);
 
     return $doc;
+}
+
+/**
+ * A signed supplier e-CF 31 addressed to the company (comprador_rnc, encf overridable), signed with a separate fake
+ * certificate that is never stored.
+ *
+ * @param  array{encf?: string, comprador_rnc?: string}  $over
+ */
+function supplierEcfXml(array $over = []): string
+{
+    openssl_pkcs12_read(fakeP12('x', '101010101'), $bundle, 'x');
+    $data = new EcfDocumentData(
+        type: NcfType::E31,
+        encf: $over['encf'] ?? 'E310000000777',
+        fechaEmision: CarbonImmutable::now(),
+        fechaVencimientoSecuencia: CarbonImmutable::parse('2027-12-31'),
+        tipoPago: 1,
+        fechaLimitePago: null,
+        terminoPago: null,
+        emisor: new EcfParty('101010101', 'Proveedor Prueba SRL', null, 'Calle 1'),
+        comprador: new EcfParty($over['comprador_rnc'] ?? '131880738', 'Gomez International SRL'),
+        items: [new EcfItem(numeroLinea: 1, indicadorFacturacion: 1, nombre: 'Servicio de prueba', descripcion: null, cantidad: '1.00', unidadMedida: 43, precioUnitario: '1000.0000', descuentoMonto: '0.00', impuestosAdicionales: [], montoItem: '1000.00', itbisAmount: '180.00')],
+        totals: new EcfTotals(montoGravadoTotal: '1000.00', montoGravadoI1: '1000.00', montoGravadoI2: null, montoGravadoI3: null, montoExento: null, totalItbis: '180.00', totalItbis1: '180.00', totalItbis2: null, totalItbis3: null, montoImpuestoAdicional: null, impuestosAdicionales: [], montoTotal: '1180.00'),
+        otraMoneda: null,
+        referencia: null,
+        indicadorNotaCredito: null,
+        numeroFacturaInterna: null,
+        codigoVendedor: null,
+    );
+
+    return app(XmlSigner::class)->signWithPem(app(EcfXmlWriter::class)->write($data, CarbonImmutable::now()), $bundle['cert'], $bundle['pkey'])->xml;
 }
 
 /**

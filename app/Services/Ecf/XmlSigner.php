@@ -21,6 +21,12 @@ class XmlSigner
     /** Appends an enveloped XMLDSig signature (rsa-sha256, C14N, enveloped transform) as the last child of the root. */
     public function sign(DOMDocument $document, EcfCertificate $certificate): SignedXml
     {
+        return $this->signWithPem($document, $this->certificates->certificatePem($certificate), $this->certificates->privateKeyPem($certificate));
+    }
+
+    /** Signs with a PEM certificate and private key (the company certificate via sign(), or any other pair). */
+    public function signWithPem(DOMDocument $document, string $certPem, string $keyPem): SignedXml
+    {
         $document->preserveWhiteSpace = false;
         $document->formatOutput = false;
 
@@ -29,9 +35,9 @@ class XmlSigner
         $dsig->addReference($document, XMLSecurityDSig::SHA256, [self::ENVELOPED_SIGNATURE], ['force_uri' => true]);
 
         $key = new XMLSecurityKey(XMLSecurityKey::RSA_SHA256, ['type' => 'private']);
-        $key->loadKey($this->certificates->privateKeyPem($certificate));
+        $key->loadKey($keyPem);
         $dsig->sign($key);
-        $dsig->add509Cert($this->certificates->certificatePem($certificate));
+        $dsig->add509Cert($certPem);
         $dsig->appendSignature($document->documentElement);
 
         $xml = (string) $document->saveXML();

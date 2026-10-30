@@ -94,3 +94,41 @@ export type EcfAnnulmentHistoryRow = {
     quantity: number;
     messages: string[];
 };
+
+export type ReceivedEcfRow = {
+    id: number;
+    rnc_emisor: string;
+    razon_social_emisor: string | null;
+    encf: string;
+    fecha_emision: string | null;
+    monto_total: string;
+    status_label: string;
+    commercial_status: string;
+    commercial_status_label: string;
+    received_at: string;
+};
+
+export type ReceivedEcfDetail = {
+    id: number;
+    rnc_emisor: string;
+    razon_social_emisor: string | null;
+    ncf_type: string;
+    encf: string;
+    rnc_comprador: string | null;
+    fecha_emision: string | null;
+    monto_total: string;
+    total_itbis: string;
+    received_at: string;
+    sender_ip: string | null;
+    arecf_status: number;
+    status_label: string;
+    arecf_reason_code: number | null;
+    commercial_status: string;
+    commercial_status_label: string;
+    commercial_reason: string | null;
+    commercial_sent_at: string | null;
+    supplier: { id: number; name: string; url: string } | null;
+    xml_url: string;
+    arecf_url: string | null;
+    acecf_url: string | null;
+};
