@@ -93,3 +93,31 @@ test('the receiver answers 503 while the active certificate is expired', functio
     $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', supplierEcfXml())])->assertStatus(503);
     expect(ReceivedEcf::count())->toBe(0);
 });
+
+test('a refused document with a bad fecha emision or an oversized total is answered with an arecf and stored with its identity only', function () {
+    $badDate = preg_replace('/<FechaEmision>[^<]*<\/FechaEmision>/', '<FechaEmision>2026-10-30</FechaEmision>', supplierEcfXml(['encf' => 'E310000000781']), 1);
+    $hugeTotal = preg_replace('/<MontoTotal>[^<]*<\/MontoTotal>/', '<MontoTotal>99999999999999999.99</MontoTotal>', supplierEcfXml(['encf' => 'E310000000782']), 1);
+    foreach ([$badDate, $hugeTotal] as $xml) {
+        $response = $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', $xml)])->assertOk()->assertHeader('content-type', 'application/xml');
+        $x = new DOMXPath(tap(new DOMDocument, fn ($d) => $d->loadXML($response->getContent())));
+        expect($x->evaluate('string(//Estado)'))->toBe('1');
+    }
+    $rows = ReceivedEcf::query()->orderBy('encf')->get();
+    expect($rows)->toHaveCount(2)->and($rows->first()->arecf_reason_code)->toBe(1)
+        ->and($rows->pluck('fecha_emision')->filter()->all())->toBe([])->and($rows->pluck('rnc_comprador')->filter()->all())->toBe([])
+        ->and($rows->pluck('monto_total')->all())->toBe(['0.00', '0.00']);
+});
+
+test('a storage failure while saving a receipt still answers the arecf', function () {
+    Storage::disk('local')->put('ecf/received/'.now()->year.'/101010101E310000000780.xml', 'stale');
+    $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', supplierEcfXml(['encf' => 'E310000000780']))])
+        ->assertOk()->assertHeader('content-type', 'application/xml');
+    expect(ReceivedEcf::count())->toBe(0);
+});
+
+test('a utf-16 document with a doctype is refused after parsing without being stored', function () {
+    $utf8 = preg_replace('/^<\?xml[^>]*\?>/', '<?xml version="1.0" encoding="UTF-16"?><!DOCTYPE ECF>', supplierEcfXml(['encf' => 'E310000000783']), 1);
+    $response = $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', mb_convert_encoding($utf8, 'UTF-16', 'UTF-8'))])->assertOk();
+    $x = new DOMXPath(tap(new DOMDocument, fn ($d) => $d->loadXML($response->getContent())));
+    expect($x->evaluate('string(//Estado)'))->toBe('1')->and($x->evaluate('string(//CodigoMotivoNoRecibido)'))->toBe('1')->and(ReceivedEcf::count())->toBe(0);
+});

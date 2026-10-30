@@ -15,6 +15,7 @@ use DOMDocument;
 use DOMXPath;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Throwable;
 
 /**
  * Receiver role (DGII-direct): keeps the e-CF that suppliers send to the company, answers each one with a signed ARECF
@@ -62,7 +63,11 @@ class ReceivedEcfService
 
         $received = null;
         if ($document !== null && $identity !== null && ! $duplicate) {
-            $received = $this->storeReceipt($xml, $document, $identity, $status, $reason, $senderIp, $arecf, $now);
+            try {
+                $received = $this->storeReceipt($xml, $document, $identity, $status, $reason, $senderIp, $arecf, $now);
+            } catch (Throwable $exception) {
+                report($exception);
+            }
         }
 
         return ['status' => $status, 'reason' => $reason, 'xml' => $arecf, 'received' => $received];
@@ -198,6 +203,7 @@ class ReceivedEcfService
     private function storeReceipt(string $xml, DOMDocument $document, array $identity, int $status, ?int $reason, ?string $senderIp, string $arecf, CarbonImmutable $now): ReceivedEcf
     {
         $xpath = new DOMXPath($document);
+        $isRefused = $reason !== null;
         $name = $identity['rnc'].$identity['encf'];
         $directory = 'ecf/received/'.$now->year;
 
@@ -210,19 +216,19 @@ class ReceivedEcfService
             $arecfPath = "{$directory}/refused/ARECF-{$name}-{$unique}.xml";
         }
 
-        return DB::transaction(function () use ($xml, $xpath, $identity, $status, $reason, $senderIp, $arecf, $now, $xmlPath, $arecfPath): ReceivedEcf {
+        return DB::transaction(function () use ($xml, $xpath, $identity, $status, $reason, $isRefused, $senderIp, $arecf, $now, $xmlPath, $arecfPath): ReceivedEcf {
             $this->storage->putNew($xmlPath, $xml);
             $this->storage->putNew($arecfPath, $arecf);
 
             $received = ReceivedEcf::query()->create([
                 'rnc_emisor' => $identity['rnc'],
-                'razon_social_emisor' => $this->nullIfBlank(mb_substr($this->text($xpath, '/ECF/Encabezado/Emisor/RazonSocialEmisor'), 0, 150)),
+                'razon_social_emisor' => $isRefused ? null : $this->nullIfBlank(mb_substr($this->text($xpath, '/ECF/Encabezado/Emisor/RazonSocialEmisor'), 0, 150)),
                 'ncf_type' => substr($identity['encf'], 0, 3),
                 'encf' => $identity['encf'],
-                'rnc_comprador' => $this->nullIfBlank($this->text($xpath, '/ECF/Encabezado/Comprador/RNCComprador')),
-                'fecha_emision' => $this->date($this->text($xpath, '/ECF/Encabezado/Emisor/FechaEmision')),
-                'monto_total' => $this->amount($this->text($xpath, '/ECF/Encabezado/Totales/MontoTotal')),
-                'total_itbis' => $this->amount($this->text($xpath, '/ECF/Encabezado/Totales/TotalITBIS')),
+                'rnc_comprador' => $isRefused ? null : $this->nullIfBlank($this->text($xpath, '/ECF/Encabezado/Comprador/RNCComprador')),
+                'fecha_emision' => $isRefused ? null : $this->date($this->text($xpath, '/ECF/Encabezado/Emisor/FechaEmision')),
+                'monto_total' => $isRefused ? '0.00' : $this->amount($this->text($xpath, '/ECF/Encabezado/Totales/MontoTotal')),
+                'total_itbis' => $isRefused ? '0.00' : $this->amount($this->text($xpath, '/ECF/Encabezado/Totales/TotalITBIS')),
                 'xml_path' => $xmlPath,
                 'arecf_path' => $arecfPath,
                 'arecf_status' => $status,
@@ -253,7 +259,7 @@ class ReceivedEcfService
         return $signed->xml;
     }
 
-    /** Null for DOCTYPE declarations (refused before parsing, never resolved) and for malformed XML. */
+    /** Null for DOCTYPE declarations (checked on the raw bytes and again after parsing, for UTF-16/32 input) and for malformed XML. */
     private function parse(string $xml): ?DOMDocument
     {
         if (preg_match('/<!DOCTYPE/i', $xml) === 1) {
@@ -269,7 +275,7 @@ class ReceivedEcfService
             libxml_use_internal_errors($previous);
         }
 
-        return $loaded ? $document : null;
+        return $loaded && $document->doctype === null ? $document : null;
     }
 
     private function text(DOMXPath $xpath, string $query): string
@@ -284,7 +290,13 @@ class ReceivedEcfService
 
     private function date(string $raw): ?string
     {
-        return CarbonImmutable::createFromFormat('d-m-Y', $raw, self::TIMEZONE)?->toDateString();
+        try {
+            $parsed = CarbonImmutable::createFromFormat('d-m-Y', $raw, self::TIMEZONE);
+        } catch (Throwable) {
+            return null;
+        }
+
+        return $parsed instanceof CarbonImmutable ? $parsed->toDateString() : null;
     }
 
     private function nullIfBlank(string $value): ?string
