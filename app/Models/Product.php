@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Product extends Model
 {
@@ -59,5 +60,11 @@ class Product extends Model
     public function additionalTaxes(): BelongsToMany
     {
         return $this->belongsToMany(AdditionalTax::class, 'additional_tax_product');
+    }
+
+    /** @return HasMany<StockBalance, $this> */
+    public function balances(): HasMany
+    {
+        return $this->hasMany(StockBalance::class);
     }
 }
