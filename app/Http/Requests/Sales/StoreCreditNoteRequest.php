@@ -28,7 +28,6 @@ class StoreCreditNoteRequest extends FormRequest
     {
         return [
             'invoice_id' => ['required', 'integer', 'exists:invoices,id'],
-            'issue_date' => ['required', 'date_format:Y-m-d'],
             'reason' => ['required', Rule::enum(CreditNoteReason::class)],
             'warehouse_id' => ['nullable', 'integer', Rule::exists('warehouses', 'id')->where('is_active', true)],
             'notes' => ['nullable', 'string', 'max:2000'],
@@ -68,10 +67,6 @@ class StoreCreditNoteRequest extends FormRequest
 
                 return;
             }
-            if ($this->string('issue_date')->toString() < $invoice->issue_date->toDateString()) {
-                $validator->errors()->add('issue_date', 'La nota no puede ser anterior a la factura.');
-            }
-
             $reason = CreditNoteReason::tryFrom($this->string('reason')->toString());
             if ($invoice->kind === InvoiceKind::Historical && $reason !== null && $reason !== CreditNoteReason::Discount) {
                 $validator->errors()->add('reason', 'Las facturas históricas solo admiten notas de descuento.');

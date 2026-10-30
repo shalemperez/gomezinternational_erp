@@ -46,7 +46,7 @@ class IssueDebitNote
             ), $data['lines'])));
             $totals = DocumentLines::totals($computed, $invoice->exchange_rate);
 
-            $issueDate = CarbonImmutable::parse((string) $data['issue_date']);
+            $issueDate = CarbonImmutable::today();
             $fiscal = $this->numbering->assign($this->resolver->forDebitNote(), $issueDate);
             $note = DebitNote::query()->create([
                 'number' => $this->documentNumbering->next(DocumentKind::DebitNote),

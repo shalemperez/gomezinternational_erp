@@ -40,7 +40,6 @@ test('debit notes require an open invoice, valid lines and permission', function
     $this->post(route('sales.debit-notes.store'), validDebitNotePayload($draft))->assertSessionHasErrors(['invoice_id' => 'La factura debe estar emitida.']);
     $i = issuedInvoice();
     $this->post(route('sales.debit-notes.store'), validDebitNotePayload($i, ['lines' => [], 'reason' => 'nope']))->assertSessionHasErrors(['lines', 'reason']);
-    $this->post(route('sales.debit-notes.store'), validDebitNotePayload($i, ['issue_date' => $i->issue_date->subDay()->toDateString()]))->assertSessionHasErrors(['issue_date' => 'La nota no puede ser anterior a la factura.']);
     salesUserWithSalesperson();
     $this->post(route('sales.debit-notes.store'), validDebitNotePayload($i))->assertForbidden();
 });

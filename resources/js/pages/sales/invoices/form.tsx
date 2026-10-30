@@ -256,6 +256,7 @@ export default function InvoiceForm({
                     <FormField
                         label="Fecha"
                         htmlFor="issue_date"
+                        hint="La fecha fiscal y el vencimiento se fijan al emitir."
                         required
                         error={errors.issue_date}
                     >

@@ -170,3 +170,19 @@ test('cancel is refused while a confirmed dispatch exists', function () {
     $this->post(route('sales.invoices.cancel', $i), ['reason' => 'Cliente desistió'])->assertSessionHas('error', 'Solo se pueden anular facturas sin cobros, notas ni despachos; usa una nota de crédito.');
     expect($i->fresh()->status)->not->toBe(InvoiceStatus::Cancelled);
 });
+
+test('issuing stamps today as the fiscal date and judges the sequence expiry on that date', function () {
+    $user = actingAsRole('accounting');
+    activeSequence('B01', ['range_from' => 1, 'range_to' => 10, 'expires_on' => now()->subDay()->toDateString()]);
+    $draft = draftFor(['salesperson_id' => $this->sp->id, 'issue_date' => now()->subMonths(2)->toDateString()], $user);
+    expect($draft->issue_date->toDateString())->toBe(now()->subMonths(2)->toDateString());
+
+    $this->post(route('sales.invoices.issue', $draft), [])->assertRedirect()->assertSessionHas('error', 'La secuencia de B01 venció el '.now()->subDay()->format('d/m/Y').'; registra una nueva secuencia autorizada por la DGII.');
+    expect($draft->fresh()->status)->toBe(InvoiceStatus::Draft);
+
+    activeSequence('B01', ['range_from' => 100, 'range_to' => 200]);
+    $this->post(route('sales.invoices.issue', $draft), [])->assertRedirect()->assertSessionHas('success');
+    $i = $draft->fresh();
+    expect($i->issue_date->toDateString())->toBe(now()->toDateString())->and($i->due_date->toDateString())->toBe(now()->addDays(30)->toDateString())
+        ->and(AccountingEvent::where('type', 'invoice_issued')->first()->payload['issue_date'])->toBe(now()->toDateString());
+});

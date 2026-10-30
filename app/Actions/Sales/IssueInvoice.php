@@ -23,6 +23,7 @@ use App\Services\Settings;
 use App\Support\Documents\ComputedTotals;
 use App\Support\Documents\LineInput;
 use App\Support\Money\Decimal;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 class IssueInvoice
@@ -66,7 +67,9 @@ class IssueInvoice
                 $this->inventory->reserve($line, $line->product_id, (int) $invoice->warehouse_id, $line->quantity);
             }
 
-            $fiscal = $this->numbering->assign($type, $invoice->issue_date);
+            $issueDate = CarbonImmutable::today();
+            $dueDate = $issueDate->addDays($invoice->payment_terms === PaymentTerms::Cash ? 0 : $invoice->credit_days);
+            $fiscal = $this->numbering->assign($type, $issueDate);
             $invoice->forceFill([
                 ...$totals,
                 'number' => $this->documentNumbering->next(DocumentKind::Invoice),
@@ -79,6 +82,8 @@ class IssueInvoice
                 'client_tax_id' => $invoice->client->tax_id,
                 'client_tax_id_type' => $invoice->client->tax_id_type->value,
                 'client_address' => $invoice->client->address,
+                'issue_date' => $issueDate->toDateString(),
+                'due_date' => $dueDate->toDateString(),
                 'status' => InvoiceStatus::Issued,
                 'balance' => $totals['total'],
                 'issued_at' => now(),

@@ -60,3 +60,9 @@ test('when two active sequences exist the one with the earliest range is used fi
     activeSequence('B01', ['range_from' => 200, 'range_to' => 300, 'next_number' => 200]);
     expect(app(FiscalNumberingService::class)->assign(NcfType::B01, Carbon::today())->ncf)->toBe('B0100000200');
 });
+
+test('non-expiring types never report an expiry date even when the sequence has one', function () {
+    activeSequence('B02', ['expires_on' => '2030-12-31']);
+    $n = app(FiscalNumberingService::class)->assign(NcfType::B02, Carbon::today());
+    expect($n->ncf)->toBe('B0200000001')->and($n->expiresOn)->toBeNull();
+});

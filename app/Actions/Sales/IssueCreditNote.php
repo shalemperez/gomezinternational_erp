@@ -69,7 +69,7 @@ class IssueCreditNote
             }
 
             $warehouseId = self::nullableInt($data['warehouse_id'] ?? null) ?? $invoice->warehouse_id;
-            $issueDate = CarbonImmutable::parse((string) $data['issue_date']);
+            $issueDate = CarbonImmutable::today();
             $fiscal = $this->numbering->assign($this->resolver->forCreditNote(), $issueDate);
             $note = CreditNote::query()->create([
                 'number' => $this->documentNumbering->next(DocumentKind::CreditNote),

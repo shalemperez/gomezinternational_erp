@@ -49,7 +49,7 @@ class FiscalNumberingService
             return new FiscalNumber(
                 $type->value.str_pad((string) $number, 8, '0', STR_PAD_LEFT),
                 $type,
-                $usable->expires_on ? CarbonImmutable::parse($usable->expires_on) : null,
+                $type->expires() && $usable->expires_on ? CarbonImmutable::parse($usable->expires_on) : null,
                 $usable->id,
             );
         });

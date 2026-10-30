@@ -6,6 +6,7 @@ use App\Exceptions\DocumentStateException;
 use App\Exceptions\ImmutableDocumentException;
 use App\Models\AccountingEvent;
 use App\Models\CreditNote;
+use App\Models\DebitNote;
 use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Models\StockBalance;
@@ -148,4 +149,14 @@ test('credit note costs are hidden from users without the cost permission', func
 
     actingAsRole('owner');
     $this->get(route('sales.credit-notes.show', $n))->assertOk()->assertInertia(fn ($p) => $p->has('creditNote.returned_cost'));
+});
+
+test('credit and debit notes are issued with today\'s date whatever date the form sends', function () {
+    actingAsRole('accounting');
+    activeSequence('B03', ['range_to' => 100]);
+    $i = issuedInvoice();
+    $this->post(route('sales.credit-notes.store'), [...validCreditNotePayload($i), 'issue_date' => '2020-01-01'])->assertRedirect()->assertSessionHas('success');
+    $this->post(route('sales.debit-notes.store'), [...validDebitNotePayload($i), 'issue_date' => '2020-01-01'])->assertRedirect()->assertSessionHas('success');
+    expect(CreditNote::firstOrFail()->issue_date->toDateString())->toBe(now()->toDateString())
+        ->and(DebitNote::firstOrFail()->issue_date->toDateString())->toBe(now()->toDateString());
 });

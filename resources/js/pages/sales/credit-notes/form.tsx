@@ -88,7 +88,6 @@ type LinePayload = {
 
 type CreditNoteFormData = {
     invoice_id: number;
-    issue_date: string;
     reason: string;
     warehouse_id: string;
     notes: string;
@@ -129,7 +128,6 @@ export default function CreditNoteForm({
 
     const form = useForm<CreditNoteFormData>({
         invoice_id: invoice.id,
-        issue_date: today,
         reason: 'discount',
         warehouse_id: String(invoice.warehouse_id ?? ''),
         notes: '',
@@ -267,21 +265,15 @@ export default function CreditNoteForm({
                             </Select>
                         </FormField>
                         <FormField
-                            label="Fecha"
+                            label="Fecha de emisión"
                             htmlFor="issue_date"
-                            error={form.errors.issue_date}
-                            required
+                            hint="Se asigna al emitir la nota."
                         >
                             <Input
                                 id="issue_date"
-                                type="date"
-                                value={form.data.issue_date}
-                                onChange={(event) =>
-                                    form.setData(
-                                        'issue_date',
-                                        event.target.value,
-                                    )
-                                }
+                                value={formatDate(today)}
+                                readOnly
+                                disabled
                             />
                         </FormField>
                         {isReturn && (

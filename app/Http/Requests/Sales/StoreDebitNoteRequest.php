@@ -25,7 +25,6 @@ class StoreDebitNoteRequest extends FormRequest
     {
         return [
             'invoice_id' => ['required', 'integer', 'exists:invoices,id'],
-            'issue_date' => ['required', 'date_format:Y-m-d'],
             'reason' => ['required', Rule::enum(DebitNoteReason::class)],
             'notes' => ['nullable', 'string', 'max:2000'],
             ...$this->lineRules(),
@@ -52,9 +51,6 @@ class StoreDebitNoteRequest extends FormRequest
                 $validator->errors()->add('invoice_id', 'No puedes emitir notas sobre facturas de otros vendedores.');
 
                 return;
-            }
-            if ($this->string('issue_date')->toString() < $invoice->issue_date->toDateString()) {
-                $validator->errors()->add('issue_date', 'La nota no puede ser anterior a la factura.');
             }
         });
     }

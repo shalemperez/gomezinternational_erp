@@ -27,7 +27,6 @@ type Props = {
 
 type DebitNoteFormData = {
     invoice_id: number;
-    issue_date: string;
     reason: string;
     notes: string;
     lines: DocumentLineInput[];
@@ -37,7 +36,6 @@ export default function DebitNoteForm({ invoice, reasons, today }: Props) {
     const { data, setData, transform, post, processing, errors } =
         useForm<DebitNoteFormData>({
             invoice_id: invoice.id,
-            issue_date: today,
             reason: reasons[0]?.value ?? '',
             notes: '',
             lines: [],
@@ -105,18 +103,15 @@ export default function DebitNoteForm({ invoice, reasons, today }: Props) {
                         </Select>
                     </FormField>
                     <FormField
-                        label="Fecha"
+                        label="Fecha de emisión"
                         htmlFor="issue_date"
-                        required
-                        error={errors.issue_date}
+                        hint="Se asigna al emitir la nota."
                     >
                         <Input
                             id="issue_date"
-                            type="date"
-                            value={data.issue_date}
-                            onChange={(event) =>
-                                setData('issue_date', event.target.value)
-                            }
+                            value={formatDate(today)}
+                            readOnly
+                            disabled
                         />
                     </FormField>
                     <FormField

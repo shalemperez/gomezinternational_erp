@@ -53,10 +53,15 @@ test('statement lists invoices, notes and payments with a running balance per cu
     activeSequence('B04', ['range_to' => 100]);
     activeSequence('B03', ['range_to' => 100]);
     $client = Client::factory()->create();
-    $i = issuedInvoice(['client_id' => $client->id, 'issue_date' => '2026-11-02']);
-    $this->post(route('sales.debit-notes.store'), validDebitNotePayload($i, ['issue_date' => '2026-11-03']))->assertRedirect();      // +590.00
-    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['issue_date' => '2026-11-04']))->assertRedirect();   // −11.80
+    $this->travelTo(CarbonImmutable::parse('2026-11-02 10:00'));
+    $i = issuedInvoice(['client_id' => $client->id]);
+    $this->travelTo(CarbonImmutable::parse('2026-11-03 10:00'));
+    $this->post(route('sales.debit-notes.store'), validDebitNotePayload($i))->assertRedirect();      // +590.00
+    $this->travelTo(CarbonImmutable::parse('2026-11-04 10:00'));
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i))->assertRedirect();   // −11.80
+    $this->travelTo(CarbonImmutable::parse('2026-11-05 10:00'));
     $this->post(route('sales.receipts.store'), validReceiptPayload($i->fresh(), ['receipt_date' => '2026-11-05', 'amount_received' => '100', 'applications' => [['invoice_id' => $i->id, 'amount' => '100']]]))->assertRedirect();
+    $this->travelBack();
 
     $s = app(ClientStatementService::class)->statement($client, CarbonImmutable::parse('2026-11-01'), CarbonImmutable::parse('2026-11-30'));
     $rows = $s['DOP']['rows'];
