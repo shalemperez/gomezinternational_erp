@@ -9,11 +9,13 @@ use App\Models\CreditNote;
 use App\Models\DebitNote;
 use App\Models\Invoice;
 use App\Models\Proforma;
+use App\Models\Receipt;
 use App\Models\User;
 use App\Policies\CreditNotePolicy;
 use App\Policies\DebitNotePolicy;
 use App\Policies\InvoicePolicy;
 use App\Policies\ProformaPolicy;
+use App\Policies\ReceiptPolicy;
 use App\Services\Mail\GoogleGmailSender;
 use App\Services\Mail\LogGmailSender;
 use App\Services\Settings;
@@ -55,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Invoice::class, InvoicePolicy::class);
         Gate::policy(CreditNote::class, CreditNotePolicy::class);
         Gate::policy(DebitNote::class, DebitNotePolicy::class);
+        Gate::policy(Receipt::class, ReceiptPolicy::class);
 
         ActivityLog::creating(function (ActivityLog $activity): void {
             // `request.id` is bound only by AssignRequestId (HTTP); console and queue work have none.

@@ -5,6 +5,7 @@ use App\Actions\Sales\SaveInvoice;
 use App\Enums\StockMovementType;
 use App\Models\Client;
 use App\Models\Currency;
+use App\Models\FinancialAccount;
 use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Models\Product;
@@ -216,5 +217,16 @@ function validDispatchPayload(Invoice $invoice, array $over = []): array
     return array_merge([
         'invoice_id' => $invoice->id, 'dispatch_date' => now()->toDateString(), 'driver_name' => 'Pedro', 'vehicle' => 'A123456', 'notes' => '',
         'lines' => $invoice->lines->map(fn ($l) => ['invoice_line_id' => $l->id, 'quantity' => $l->quantity, 'lot_id' => ''])->all(),
+    ], $over);
+}
+
+function validReceiptPayload(Invoice $invoice, array $over = []): array
+{
+    $account = FinancialAccount::factory()->create(['currency_id' => $invoice->currency_id]);
+
+    return array_merge([
+        'client_id' => $invoice->client_id, 'currency_id' => $invoice->currency_id, 'receipt_date' => now()->toDateString(), 'payment_method' => 'transfer', 'financial_account_id' => $account->id,
+        'reference' => 'TRX-1', 'amount_received' => $invoice->balance, 'retention_itbis' => '0', 'retention_isr' => '0', 'notes' => '',
+        'applications' => [['invoice_id' => $invoice->id, 'amount' => $invoice->balance]],
     ], $over);
 }

@@ -186,6 +186,12 @@ class Invoice extends Model implements HasDocumentLines
         return $this->hasMany(Dispatch::class);
     }
 
+    /** @return HasMany<ReceiptApplication, $this> */
+    public function applications(): HasMany
+    {
+        return $this->hasMany(ReceiptApplication::class);
+    }
+
     /** Derives dispatch_status from the invoice lines: none, partial or complete (dispatched or credited covers the quantity). */
     public function refreshDispatchStatus(): void
     {
