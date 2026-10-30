@@ -16,9 +16,14 @@ use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Ecf\CertificateStore;
+use App\Services\Ecf\EcfXmlWriter;
+use App\Services\Ecf\XmlSigner;
 use App\Services\Inventory\InventoryService;
+use App\Services\Settings;
+use App\Support\Ecf\EcfDocumentData;
 use App\Support\FiscalId;
 use App\Support\Inventory\StockLine;
+use Carbon\CarbonImmutable;
 use Database\Seeders\PermissionSeeder;
 use Spatie\Permission\Models\Role;
 
@@ -254,4 +259,23 @@ function fakeP12(string $password = 'secret', string $rnc = '131880738', int $da
 function activeCertificate(?User $actor = null): EcfCertificate
 {
     return app(CertificateStore::class)->store(fakeP12(), 'secret', $actor ?? User::factory()->create(), 'Certificado de prueba');
+}
+
+function companyFiscalSettings(array $over = []): void
+{
+    $settings = app(Settings::class);
+    foreach (array_merge(['company.name' => 'Gomez International', 'company.legal_name' => 'Gomez International SRL', 'company.rnc' => '131880738', 'company.address' => 'Av. Winston Churchill 1099, Santo Domingo', 'company.email' => 'facturacion@gomez.test', 'ecf.company.municipio' => '010100', 'ecf.company.provincia' => '010000'], $over) as $key => $value) {
+        $settings->set($key, $value);
+    }
+}
+
+/** Writes, signs (with the active or a fresh fake certificate) and returns the signed DOMDocument for assertions and XSD validation. */
+function signedEcfXml(EcfDocumentData $data): DOMDocument
+{
+    $certificate = app(CertificateStore::class)->active() ?? activeCertificate();
+    $signed = app(XmlSigner::class)->sign(app(EcfXmlWriter::class)->write($data, CarbonImmutable::now()), $certificate);
+    $doc = new DOMDocument;
+    $doc->loadXML($signed->xml);
+
+    return $doc;
 }
