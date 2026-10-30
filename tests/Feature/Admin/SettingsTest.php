@@ -10,6 +10,7 @@ function settingsPayload(array $over = []): array
     return array_replace_recursive([
         'company' => ['name' => 'Gomez International', 'legal_name' => 'Gomez International SRL', 'rnc' => '1-01-85004-3', 'address' => 'Av. X #1', 'phone' => '809-000-0000', 'email' => 'info@empresa.test'],
         'exchange_rates' => ['source' => 'manual', 'http_json' => ['url' => '', 'json_path' => '']],
+        'fiscal' => ['consumo_id_threshold' => '250000'], 'sales' => ['proforma_validity_days' => '15'], 'inventory' => ['expiring_days' => '30'],
     ], $over);
 }
 
@@ -56,4 +57,13 @@ test('settings update is logged with the changed keys', function () {
 
     $log = Activity::inLog('settings')->where('event', 'updated')->whereNotNull('properties->keys')->latest('id')->firstOrFail();
     expect($log->properties['keys'])->toContain('company.name');
+});
+
+test('sales and inventory settings are saved with bounds', function () {
+    actingAsRole('owner');
+    $this->put(route('admin.settings.update'), settingsPayload(['fiscal' => ['consumo_id_threshold' => '300000'], 'sales' => ['proforma_validity_days' => '20'], 'inventory' => ['expiring_days' => '60']]))->assertRedirect();
+    $s = app(Settings::class);
+    expect($s->get('fiscal.consumo_id_threshold'))->toBe('300000.00')->and($s->get('sales.proforma_validity_days'))->toBe(20)->and($s->get('inventory.expiring_days'))->toBe(60);
+    $this->put(route('admin.settings.update'), settingsPayload(['fiscal' => ['consumo_id_threshold' => '-1'], 'sales' => ['proforma_validity_days' => '0'], 'inventory' => ['expiring_days' => '400']]))->assertSessionHasErrors(['fiscal.consumo_id_threshold', 'sales.proforma_validity_days', 'inventory.expiring_days']);
+    $this->get(route('admin.settings.index'))->assertInertia(fn ($p) => $p->has('values', fn ($values) => $values->where('fiscal.consumo_id_threshold', '300000.00')->etc())->where('fiscalMode', 'ncf'));
 });

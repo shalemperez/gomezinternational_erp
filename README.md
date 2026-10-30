@@ -24,3 +24,9 @@ Requisitos: PHP 8.4, PostgreSQL 17, Node 22 solo para compilar (`npm ci && npm r
 
 ## Documentación
 Diseño: `docs/superpowers/specs/`. Planes por fase: `docs/superpowers/plans/`.
+
+## Fase 2 — Ventas con NCF
+- Antes de facturar, registra las secuencias NCF en Administración → Secuencias NCF.
+- Cada usuario conecta su Gmail desde el menú de usuario para enviar documentos por correo.
+- Programador (entradas diarias): `CheckNcfSequences` 07:30, `CheckStockAlerts` 07:35, `ExpireProformas` 00:10.
+- Tras cada despliegue ejecuta `php artisan db:seed --force` (secuencias de documentos y plantillas de correo).
