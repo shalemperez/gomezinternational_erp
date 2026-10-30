@@ -35,7 +35,10 @@ class SubmitEcfDocument implements ShouldBeUnique, ShouldQueue
         }
 
         try {
-            $ecf->submit($this->document);
+            $knownByProvider = $this->document->attempts > 0 && $ecf->lookup($this->document);
+            if (! $knownByProvider) {
+                $ecf->submit($this->document);
+            }
         } catch (Throwable $exception) {
             $ecf->recordFailure($this->document, $exception, $this->document->isRfce() ? 'rfce' : 'send');
 

@@ -11,8 +11,10 @@ use App\Services\Ecf\CertificateStore;
 use App\Services\Ecf\DgiiClient;
 use App\Services\Ecf\EcfStorage;
 use App\Services\Ecf\LocalXmlPreparer;
+use App\Services\Settings;
 use App\Support\Ecf\EcfDocumentData;
 use App\Support\Ecf\EcfSubmissionResult;
+use App\Support\FiscalId;
 use InvalidArgumentException;
 
 /**
@@ -25,6 +27,7 @@ class DgiiDirectProvider implements EcfProvider
         private readonly CertificateStore $certificates,
         private readonly LocalXmlPreparer $preparer,
         private readonly EcfStorage $storage,
+        private readonly Settings $settings,
     ) {}
 
     public function name(): string
@@ -78,9 +81,40 @@ class DgiiDirectProvider implements EcfProvider
      */
     public function poll(EcfDocument $document): EcfSubmissionResult
     {
-        $response = $this->client->result((string) $document->track_id);
+        return $this->resultFor((string) $document->track_id);
+    }
 
-        return $this->dgiiResult($response['json'], $response['status'], $document->track_id);
+    /**
+     * The estado text of the trackId list is not trusted: each trackId is resolved through consultaresultado.
+     *
+     * @throws EcfException when the DGII cannot be reached or answers with an unexpected status
+     */
+    public function lookup(EcfDocument $document): ?EcfSubmissionResult
+    {
+        if ($document->isRfce() || ! $this->client->hasEndpoint('consulta_trackids')) {
+            return null;
+        }
+
+        $response = $this->client->trackIds(FiscalId::normalize((string) $this->settings->get('company.rnc', '')), (string) $document->encf);
+        if ($response['status'] === 404) {
+            return null;
+        }
+
+        if ($response['status'] < 200 || $response['status'] > 299) {
+            throw new EcfException("Respuesta inesperada de la DGII al consultar los trackId ({$response['status']})");
+        }
+
+        $trackIds = collect($response['json'])
+            ->filter(fn (mixed $entry): bool => is_array($entry))
+            ->map(fn (array $entry): string => (string) ($entry['trackId'] ?? $entry['trackid'] ?? ''))
+            ->filter(fn (string $trackId): bool => $trackId !== '');
+        if ($trackIds->isEmpty()) {
+            return null;
+        }
+
+        $results = $trackIds->map(fn (string $trackId): EcfSubmissionResult => $this->resultFor($trackId));
+
+        return $results->first(fn (EcfSubmissionResult $result): bool => $result->status->isValidForTax()) ?? $results->last();
     }
 
     /**
@@ -103,6 +137,16 @@ class DgiiDirectProvider implements EcfProvider
             sequenceUsed: null,
             httpStatus: $response['status'],
         );
+    }
+
+    /**
+     * @throws EcfException when the DGII cannot be reached or answers with an unknown status code
+     */
+    private function resultFor(string $trackId): EcfSubmissionResult
+    {
+        $response = $this->client->result($trackId);
+
+        return $this->dgiiResult($response['json'], $response['status'], $trackId);
     }
 
     /**

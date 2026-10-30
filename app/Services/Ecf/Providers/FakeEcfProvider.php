@@ -65,6 +65,11 @@ class FakeEcfProvider implements EcfProvider
         return $this->finalResult(in_array($outcome, ['accepted', 'conditionally_accepted', 'rejected'], true) ? $outcome : 'accepted', $document->track_id);
     }
 
+    public function lookup(EcfDocument $document): ?EcfSubmissionResult
+    {
+        return null;
+    }
+
     public function annul(EcfAnnulment $annulment, string $signedXml): EcfSubmissionResult
     {
         return $this->result(EcfStatus::Accepted, null, 1);

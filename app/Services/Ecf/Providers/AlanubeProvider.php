@@ -64,6 +64,14 @@ class AlanubeProvider implements EcfProvider
     }
 
     /**
+     * @throws EcfException when Alanube cannot be reached
+     */
+    public function lookup(EcfDocument $document): ?EcfSubmissionResult
+    {
+        return blank($document->track_id) ? null : $this->poll($document);
+    }
+
+    /**
      * @throws EcfException always: the annulment of unused sequences is managed in the Alanube portal for now
      */
     public function annul(EcfAnnulment $annulment, string $signedXml): EcfSubmissionResult

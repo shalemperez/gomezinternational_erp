@@ -24,6 +24,11 @@ class DgiiClient
         private readonly EcfService $ecf,
     ) {}
 
+    public function hasEndpoint(string $key): bool
+    {
+        return filled(config("ecf.environments.{$this->ecf->environment()->value}.{$key}"));
+    }
+
     /** @throws EcfException when the environment has no endpoint for the key */
     public function endpoint(string $key): string
     {
@@ -143,6 +148,22 @@ class DgiiClient
         $response = $this->authorized(fn (string $token): Response => Http::withToken($token)->acceptJson()
             ->timeout((int) config('ecf.http_timeout_seconds'))
             ->get($this->endpoint('consulta_resultado'), ['trackid' => $trackId]), 'consulta_resultado');
+
+        return $this->summary($response);
+    }
+
+    /**
+     * The trackIds the DGII holds for an e-NCF of the issuer.
+     *
+     * @return array{status: int, json: array<mixed>}
+     *
+     * @throws EcfException on connection failure, HTTP 5xx or a 401 that persists after the token refresh
+     */
+    public function trackIds(string $rncEmisor, string $encf): array
+    {
+        $response = $this->authorized(fn (string $token): Response => Http::withToken($token)->acceptJson()
+            ->timeout((int) config('ecf.http_timeout_seconds'))
+            ->get($this->endpoint('consulta_trackids'), ['rncemisor' => $rncEmisor, 'encf' => $encf]), 'consulta_trackids');
 
         return $this->summary($response);
     }

@@ -6,6 +6,7 @@ $dgii = fn (string $segment): array => [
     'recepcion' => "https://ecf.dgii.gov.do/{$segment}/recepcion/api/facturaselectronicas",
     'recepcion_fc' => "https://fc.dgii.gov.do/{$segment}/recepcionfc/api/recepcion/ecf",
     'consulta_resultado' => "https://ecf.dgii.gov.do/{$segment}/consultaresultado/api/consultas/estado",
+    'consulta_trackids' => "https://ecf.dgii.gov.do/{$segment}/consultatrackids/api/trackids/consulta",
     'consulta_estado' => "https://ecf.dgii.gov.do/{$segment}/consultaestado/api/consultas/estado",
     'aprobacion_comercial' => "https://ecf.dgii.gov.do/{$segment}/aprobacioncomercial/api/aprobacioncomercial",
     'anulacion_rangos' => "https://ecf.dgii.gov.do/{$segment}/anulacionrangos/api/operaciones/anularrango",
@@ -16,7 +17,8 @@ $dgii = fn (string $segment): array => [
 
 return [
     // DGII web services per environment (Descripción Técnica Servicios DGII, bitácora 02-01-2026).
-    'environments' => ['test' => $dgii('testecf'), 'cert' => $dgii('certecf'), 'prod' => $dgii('ecf')],
+    // Consulta TrackIds exists only in TesteCF and eCF (RES §4); in CerteCF a resend is sent without lookup.
+    'environments' => ['test' => $dgii('testecf'), 'cert' => array_diff_key($dgii('certecf'), ['consulta_trackids' => true]), 'prod' => $dgii('ecf')],
     'xsd_path' => resource_path('xsd/dgii'),
     'storage_disk' => 'local',
     'token_ttl_minutes' => 50, // DGII tokens last 1 hour; refresh early

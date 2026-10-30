@@ -115,6 +115,23 @@ class EcfService
     }
 
     /**
+     * Applies what the provider already holds for the e-NCF; false when it has no record and the caller must send.
+     *
+     * @throws EcfException when the provider cannot be reached
+     */
+    public function lookup(EcfDocument $ecfDocument): bool
+    {
+        $result = $this->provider()->lookup($ecfDocument);
+        if ($result === null) {
+            return false;
+        }
+
+        $this->applyResult($ecfDocument, $result, 'lookup');
+
+        return true;
+    }
+
+    /**
      * Records the attempt under a row lock before any network call, so a concurrent cancel sees it (GC-23).
      *
      * @param  list<EcfStatus>  $allowed

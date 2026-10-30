@@ -4,6 +4,7 @@ use App\Enums\EcfStatus;
 use App\Enums\NcfType;
 use App\Exceptions\EcfCertificateException;
 use App\Exceptions\EcfException;
+use App\Jobs\PollEcfStatus;
 use App\Jobs\SubmitEcfDocument;
 use App\Models\Client;
 use App\Models\EcfCertificate;
@@ -17,6 +18,7 @@ use Carbon\CarbonImmutable;
 use Database\Seeders\DocumentSequenceSeeder;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
+use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
@@ -160,4 +162,36 @@ test('a retry dispatched while the submission is running is dropped by the uniqu
     SubmitEcfDocument::dispatch($doc);
     expect(Http::recorded(fn (Request $r) => str_contains($r->url(), '/recepcion/api/facturaselectronicas'))->count())->toBe(1)
         ->and($doc->fresh()->status)->toBe(EcfStatus::Accepted)->and($doc->fresh()->attempts)->toBe(2); // submit claim + chained poll claim
+});
+
+test('a resend after an unclear failure asks the dgii for the e-ncf and applies its accepted result instead of sending again', function () {
+    $service = app(EcfService::class);
+    $doc = $service->create(issuedInvoice(), new FiscalNumber('E310000000011', NcfType::E31, CarbonImmutable::parse('2027-12-31'), electronicSequenceId('E31')), null);
+    $doc->forceFill(['attempts' => 1, 'last_error' => 'Error HTTP 503 de la DGII en recepcion'])->save();
+    Http::fake([...fakeDgiiAuth(),
+        'https://ecf.dgii.gov.do/testecf/consultatrackids/api/trackids/consulta?rncemisor=131880738&encf=E310000000011' => Http::response([['trackId' => 'TRK-OLD', 'estado' => 'Rechazado', 'fechaRecepcion' => '01-11-2026 10:00:00'], ['trackId' => 'TRK-FIRST', 'estado' => 'Aceptado', 'fechaRecepcion' => '01-11-2026 09:00:00']]),
+        'https://ecf.dgii.gov.do/testecf/consultaresultado/api/consultas/estado?trackid=TRK-OLD' => Http::response(['trackId' => 'TRK-OLD', 'codigo' => 2, 'estado' => 'Rechazado', 'mensajes' => [['valor' => 'e-NCF duplicado', 'codigo' => 1]]]),
+        'https://ecf.dgii.gov.do/testecf/consultaresultado/api/consultas/estado?trackid=TRK-FIRST' => Http::response(['trackId' => 'TRK-FIRST', 'codigo' => 1, 'estado' => 'Aceptado', 'mensajes' => []]),
+    ]);
+    (new SubmitEcfDocument($doc))->handle($service);
+    $doc->refresh();
+    expect($doc->status)->toBe(EcfStatus::Accepted)->and($doc->track_id)->toBe('TRK-FIRST')->and($doc->transmissions()->where('kind', 'lookup')->count())->toBe(1);
+    Http::assertNotSent(fn (Request $r) => str_contains($r->url(), '/recepcion/api/facturaselectronicas'));
+});
+
+test('a resend whose e-ncf the dgii does not know is sent again and a first submission never asks', function () {
+    $service = app(EcfService::class);
+    $first = $service->create(issuedInvoice(), new FiscalNumber('E310000000012', NcfType::E31, CarbonImmutable::parse('2027-12-31'), electronicSequenceId('E31')), null);
+    $retry = $service->create(issuedInvoice(), new FiscalNumber('E310000000013', NcfType::E31, CarbonImmutable::parse('2027-12-31'), electronicSequenceId('E31')), null);
+    $retry->forceFill(['attempts' => 1])->save();
+    Http::fake([...fakeDgiiAuth(),
+        'https://ecf.dgii.gov.do/testecf/consultatrackids/api/trackids/consulta?rncemisor=131880738&encf=E310000000013' => Http::response([]),
+        'https://ecf.dgii.gov.do/testecf/recepcion/api/facturaselectronicas' => Http::response(['trackId' => 'TRK-N']),
+    ]);
+    Bus::fake([PollEcfStatus::class]);
+    (new SubmitEcfDocument($first))->handle($service);
+    (new SubmitEcfDocument($retry))->handle($service);
+    expect($first->fresh()->status)->toBe(EcfStatus::Sent)->and($retry->fresh()->status)->toBe(EcfStatus::Sent)->and($retry->fresh()->attempts)->toBe(2);
+    Http::assertSent(fn (Request $r) => str_contains($r->url(), 'consultatrackids') && str_contains($r->url(), 'encf=E310000000013'));
+    Http::assertNotSent(fn (Request $r) => str_contains($r->url(), 'encf=E310000000012'));
 });

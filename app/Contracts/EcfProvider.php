@@ -25,5 +25,13 @@ interface EcfProvider
 
     public function poll(EcfDocument $document): EcfSubmissionResult;
 
+    /**
+     * What the provider already holds for this e-NCF, asked before a resend after an unclear failure; null when it has
+     * no record (the caller sends again).
+     *
+     * @throws EcfException when the provider cannot be reached
+     */
+    public function lookup(EcfDocument $document): ?EcfSubmissionResult;
+
     public function annul(EcfAnnulment $annulment, string $signedXml): EcfSubmissionResult;
 }

@@ -96,3 +96,12 @@ test('the alanube webhook triggers a poll when the api key header matches', func
     Bus::assertDispatched(PollEcfStatus::class, fn ($j) => $j->document->is($doc));
     expect(Activity::inLog('ecf_documents')->where('subject_id', $doc->id)->where('event', 'webhook_received')->exists())->toBeTrue();
 });
+
+test('a resend of an alanube document with a stored id reads it back instead of posting again', function () {
+    Http::fake(['https://sandbox.alanube.co/dom/v1/fiscal-invoices/ALN-7' => Http::response(['id' => 'ALN-7', 'status' => 'FINISHED', 'legalStatus' => 'ACCEPTED', 'governmentResponse' => ['code' => 1, 'value' => []]])]);
+    $doc = issuedInvoice()->ecfDocument;
+    $doc->forceFill(['attempts' => 1, 'track_id' => 'ALN-7'])->save();
+    (new SubmitEcfDocument($doc))->handle(app(EcfService::class));
+    expect($doc->fresh()->status)->toBe(EcfStatus::Accepted);
+    Http::assertNotSent(fn (Request $r) => $r->method() === 'POST');
+});
