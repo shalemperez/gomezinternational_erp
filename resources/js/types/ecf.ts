@@ -72,3 +72,25 @@ export type EcfTransmissionRow = {
     created_at: string | null;
     url: string;
 };
+
+export type EcfAnnulmentPendingRange = {
+    id: number;
+    ncf_type: string;
+    range_from: number;
+    range_to: number;
+    encf_from: string;
+    encf_to: string;
+    quantity: number;
+    reason: string;
+    document_number: string | null;
+};
+
+export type EcfAnnulmentHistoryRow = {
+    id: number;
+    status: string;
+    status_label: string;
+    sent_at: string | null;
+    ranges_count: number;
+    quantity: number;
+    messages: string[];
+};

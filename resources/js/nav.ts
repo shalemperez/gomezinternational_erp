@@ -1,5 +1,6 @@
 import {
     ArrowLeftRight,
+    Ban,
     Banknote,
     Boxes,
     Building2,
@@ -210,6 +211,12 @@ export const navGroups: NavGroup[] = [
                 href: '/fiscal/ecf-documents',
                 icon: FileBadge,
                 permission: 'fiscal.ecf.view',
+            },
+            {
+                title: 'Anulación de e-NCF',
+                href: '/fiscal/ecf-annulments',
+                icon: Ban,
+                permission: 'fiscal.ecf.annul',
             },
         ],
     },

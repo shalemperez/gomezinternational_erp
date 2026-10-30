@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Fiscal\EcfAnnulmentController;
 use App\Http\Controllers\Fiscal\EcfDocumentController;
 use Illuminate\Support\Facades\Route;
 
@@ -11,4 +12,8 @@ Route::middleware(['auth'])->prefix('fiscal')->name('fiscal.')->group(function (
     Route::post('ecf-documents/{ecfDocument}/poll', [EcfDocumentController::class, 'poll'])->name('ecf-documents.poll');
     Route::get('ecf-documents/{ecfDocument}/xml', [EcfDocumentController::class, 'xml'])->name('ecf-documents.xml');
     Route::get('ecf-documents/{ecfDocument}/transmissions/{transmission}', [EcfDocumentController::class, 'transmission'])->name('ecf-documents.transmission');
+    Route::get('ecf-annulments', [EcfAnnulmentController::class, 'index'])->name('ecf-annulments.index');
+    Route::post('ecf-annulments/ranges', [EcfAnnulmentController::class, 'storeRange'])->name('ecf-annulments.ranges.store');
+    Route::delete('ecf-annulments/ranges/{range}', [EcfAnnulmentController::class, 'destroyRange'])->name('ecf-annulments.ranges.destroy');
+    Route::post('ecf-annulments/send', [EcfAnnulmentController::class, 'send'])->name('ecf-annulments.send');
 });

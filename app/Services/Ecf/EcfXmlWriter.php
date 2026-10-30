@@ -3,6 +3,7 @@
 namespace App\Services\Ecf;
 
 use App\Enums\NcfType;
+use App\Models\EcfAnnulmentRange;
 use App\Support\Ecf\EcfAdditionalTax;
 use App\Support\Ecf\EcfDocumentData;
 use App\Support\Ecf\EcfItem;
@@ -13,6 +14,7 @@ use Carbon\CarbonImmutable;
 use DOMDocument;
 use DOMElement;
 use DOMNode;
+use Illuminate\Support\Collection;
 
 class EcfXmlWriter
 {
@@ -74,6 +76,48 @@ class EcfXmlWriter
         $this->text($document, $header, 'CodigoSeguridadeCF', $securityCode);
 
         return $document;
+    }
+
+    /**
+     * Writes the ANECF that annuls unused e-NCF ranges: one Anulacion per e-CF type in ascending order, numbered from 1.
+     *
+     * @param  Collection<int, EcfAnnulmentRange>  $ranges
+     */
+    public function writeAnecf(string $rncEmisor, Collection $ranges, CarbonImmutable $fechaHora): DOMDocument
+    {
+        $document = $this->newDocument();
+        $root = $this->element($document, $document, 'ANECF');
+
+        $header = $this->element($document, $root, 'Encabezado');
+        $this->text($document, $header, 'Version', self::VERSION);
+        $this->text($document, $header, 'RncEmisor', $rncEmisor);
+        $this->text($document, $header, 'CantidadeNCFAnulados', (string) $ranges->sum('quantity'));
+        $this->text($document, $header, 'FechaHoraAnulacioneNCF', $fechaHora->setTimezone(self::TIMEZONE)->format('d-m-Y H:i:s'));
+
+        $detail = $this->element($document, $root, 'DetalleAnulacion');
+        $line = 0;
+        foreach ($ranges->groupBy('ncf_type')->sortKeys() as $ncfType => $typeRanges) {
+            $type = NcfType::from((string) $ncfType);
+            $anulacion = $this->element($document, $detail, 'Anulacion');
+            $this->text($document, $anulacion, 'NoLinea', (string) ++$line);
+            $this->text($document, $anulacion, 'TipoeCF', $type->ecfCode());
+
+            $table = $this->element($document, $anulacion, 'TablaRangoSecuenciasAnuladaseNCF');
+            foreach ($typeRanges->sortBy('range_from') as $range) {
+                $sequences = $this->element($document, $table, 'Secuencias');
+                $this->text($document, $sequences, 'SecuenciaeNCFDesde', $this->encf($type, (int) $range->range_from));
+                $this->text($document, $sequences, 'SecuenciaeNCFHasta', $this->encf($type, (int) $range->range_to));
+            }
+
+            $this->text($document, $anulacion, 'CantidadeNCFAnulados', (string) $typeRanges->sum('quantity'));
+        }
+
+        return $document;
+    }
+
+    private function encf(NcfType $type, int $number): string
+    {
+        return $type->value.str_pad((string) $number, $type->sequenceDigits(), '0', STR_PAD_LEFT);
     }
 
     private function newDocument(): DOMDocument

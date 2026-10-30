@@ -2,9 +2,15 @@
 
 namespace App\Models;
 
+use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
+/**
+ * @property string $status
+ * @property array<string, mixed>|null $response
+ * @property CarbonInterface|null $sent_at
+ */
 class EcfAnnulment extends Model
 {
     protected $fillable = ['environment', 'status', 'xml_path', 'response', 'sent_at', 'created_by'];

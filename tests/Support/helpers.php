@@ -25,6 +25,7 @@ use App\Support\FiscalId;
 use App\Support\Inventory\StockLine;
 use Carbon\CarbonImmutable;
 use Database\Seeders\PermissionSeeder;
+use Illuminate\Support\Facades\Http;
 use Spatie\Permission\Models\Role;
 
 /** Creates (or reuses) roles/permissions, creates a user with the given role and authenticates it. */
@@ -309,4 +310,13 @@ function ecfMode(string $provider = 'fake', string $environment = 'test', string
 {
     ecfSettings($provider, $environment, $outcome);
     app(Settings::class)->set('fiscal.mode', 'ecf');
+}
+
+/** The DGII seed and token endpoints of the test environment. */
+function fakeDgiiAuth(): array
+{
+    return [
+        'https://ecf.dgii.gov.do/testecf/autenticacion/api/autenticacion/semilla' => Http::response('<?xml version="1.0"?><SemillaModel><valor>abc-123</valor><fecha>2026-11-01T10:00:00</fecha></SemillaModel>', 200, ['Content-Type' => 'application/xml']),
+        'https://ecf.dgii.gov.do/testecf/autenticacion/api/autenticacion/validarsemilla' => Http::response(['token' => 'tok-1', 'expira' => '2026-11-01T11:00:00Z', 'expedido' => '2026-11-01T10:00:00Z']),
+    ];
 }
