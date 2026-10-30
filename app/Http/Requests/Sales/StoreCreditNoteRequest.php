@@ -74,7 +74,7 @@ class StoreCreditNoteRequest extends FormRequest
 
             $lines = $this->input('lines');
             foreach (is_array($lines) ? $lines : [] as $index => $row) {
-                if (! is_array($row) || $validator->errors()->hasAny(array_map(fn (string $field) => "lines.{$index}.{$field}", ['product_id', 'invoice_line_id', 'quantity', 'unit_price', 'lot_id']))) {
+                if (! is_array($row) || $validator->errors()->hasAny(array_map(fn (string $field) => "lines.{$index}.{$field}", ['product_id', 'invoice_line_id', 'quantity', 'unit_price', 'discount_percent', 'lot_id']))) {
                     continue; // rows that already failed field rules are not compared
                 }
                 if ($invoice->kind === InvoiceKind::Historical) {
@@ -103,6 +103,9 @@ class StoreCreditNoteRequest extends FormRequest
         }
         if (Decimal::cmp((string) ($row['unit_price'] ?? '0'), $line->unit_price) > 0) {
             $validator->errors()->add("lines.{$index}.unit_price", "La nota no puede superar el precio facturado ({$line->unit_price}).");
+        }
+        if (Decimal::cmp((string) ($row['discount_percent'] ?? '0'), $line->discount_percent) < 0) {
+            $validator->errors()->add("lines.{$index}.discount_percent", "El descuento no puede ser menor que el facturado ({$line->discount_percent} %).");
         }
 
         $quantity = (string) ($row['quantity'] ?? '0');

@@ -53,6 +53,8 @@ class IssueCreditNote
                     'input' => new LineInput(
                         (int) $row['product_id'], (string) $row['quantity'], (string) $row['unit_price'],
                         (string) ($row['discount_percent'] ?? '0'), $row['description'] ?? null, $invoiceLine?->itbis_rate,
+                        $invoiceLine === null ? null : array_values(array_map(fn (array $tax) => (string) $tax['code'], $invoiceLine->additional_taxes ?? [])),
+                        $reason === CreditNoteReason::Discount,
                     ),
                     'invoiceLine' => $invoiceLine,
                     'lotId' => self::nullableInt($row['lot_id'] ?? null),

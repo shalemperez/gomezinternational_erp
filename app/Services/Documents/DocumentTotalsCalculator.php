@@ -2,6 +2,8 @@
 
 namespace App\Services\Documents;
 
+use App\Enums\AdditionalTaxCalculationType;
+use App\Models\AdditionalTax;
 use App\Models\Client;
 use App\Models\PriceList;
 use App\Models\PriceListItem;
@@ -20,6 +22,7 @@ class DocumentTotalsCalculator
     public function compute(array $lines): ComputedTotals
     {
         $products = Product::query()->with('additionalTaxes')->whereIn('id', array_map(fn (LineInput $l) => $l->productId, $lines))->get()->keyBy('id');
+        $snapshotTaxes = AdditionalTax::query()->whereIn('code', collect($lines)->flatMap(fn (LineInput $l) => $l->additionalTaxCodes ?? [])->unique()->values()->all())->get()->keyBy('code');
         $computed = [];
         foreach ($lines as $input) {
             /** @var Product $product */
@@ -34,7 +37,13 @@ class DocumentTotalsCalculator
             $additional = [];
             $itbisBase = Decimal::of($taxableBase);
             $additionalTotal = Decimal::of('0');
-            foreach ($product->additionalTaxes->where('is_active', true) as $tax) {
+            $taxes = $input->additionalTaxCodes === null
+                ? $product->additionalTaxes->where('is_active', true)
+                : collect($input->additionalTaxCodes)->map(fn (string $code) => $snapshotTaxes->get($code))->filter();
+            foreach ($taxes as $tax) {
+                if ($input->percentTaxesOnly && $tax->calculation_type !== AdditionalTaxCalculationType::PercentOfBase) {
+                    continue;
+                }
                 $amount = $this->taxCalculator->forLine($tax, $quantity, $taxableBase, (string) $product->volume_liters, (string) $product->alcohol_degree);
                 $additional[] = ['code' => $tax->code, 'name' => $tax->name, 'amount' => $amount];
                 $additionalTotal = $additionalTotal->plus(Decimal::of($amount));

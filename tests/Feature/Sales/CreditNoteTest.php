@@ -5,10 +5,12 @@ use App\Enums\InvoiceStatus;
 use App\Exceptions\DocumentStateException;
 use App\Exceptions\ImmutableDocumentException;
 use App\Models\AccountingEvent;
+use App\Models\AdditionalTax;
 use App\Models\CreditNote;
 use App\Models\DebitNote;
 use App\Models\Invoice;
 use App\Models\NcfSequence;
+use App\Models\Product;
 use App\Models\StockBalance;
 use App\Models\StockMovement;
 use App\Services\Inventory\InventoryService;
@@ -159,4 +161,41 @@ test('credit and debit notes are issued with today\'s date whatever date the for
     $this->post(route('sales.debit-notes.store'), [...validDebitNotePayload($i), 'issue_date' => '2020-01-01'])->assertRedirect()->assertSessionHas('success');
     expect(CreditNote::firstOrFail()->issue_date->toDateString())->toBe(now()->toDateString())
         ->and(DebitNote::firstOrFail()->issue_date->toDateString())->toBe(now()->toDateString());
+});
+
+test('a credit note line cannot carry less discount than the invoiced line', function () {
+    actingAsRole('accounting');
+    $i = issuedInvoice(['lines' => [['product_id' => Product::factory()->create(['itbis_rate' => '18.00'])->id, 'description' => '', 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '50']]]); // net 100 + 18 = 118.00
+    $line = $i->lines->first();
+    $row = fn (string $discount) => ['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100', 'discount_percent' => $discount, 'lot_id' => ''];
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [$row('0')]]))
+        ->assertSessionHasErrors(['lines.0.discount_percent' => 'El descuento no puede ser menor que el facturado (50.0000 %).']);
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [$row('50')]]))->assertRedirect()->assertSessionHas('success');
+    expect(CreditNote::firstOrFail()->total)->toBe('59.00')->and($i->fresh()->balance)->toBe('59.00');
+});
+
+test('discount notes skip fixed-per-unit taxes and every note uses the invoice line tax snapshot', function () {
+    $user = actingAsRole('accounting');
+    $adValorem = AdditionalTax::factory()->create(['code' => 'ISC-ADV', 'calculation_type' => 'percent_of_base', 'rate' => '10.0000', 'amount' => null, 'included_in_itbis_base' => true]);
+    $fixed = AdditionalTax::factory()->create(['code' => 'ISC-FIX', 'calculation_type' => 'fixed_per_unit', 'rate' => null, 'amount' => '5.0000', 'included_in_itbis_base' => false]);
+    $product = Product::factory()->create(['itbis_rate' => '18.00']);
+    $product->additionalTaxes()->attach([$adValorem->id, $fixed->id]);
+    $i = issuedInvoice(['lines' => [['product_id' => $product->id, 'description' => '', 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '0']]]);
+    $line = $i->lines->first();
+    expect($i->total)->toBe('269.60'); // 200 + 20 + 10 + 18 % × 220
+
+    $product->additionalTaxes()->detach($fixed->id); // the snapshot, not the current setup, drives the note
+    $row = fn (string $qty, string $price) => ['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => $qty, 'unit_price' => $price, 'discount_percent' => '0', 'lot_id' => ''];
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['reason' => 'discount', 'lines' => [$row('2', '10')]]))->assertRedirect()->assertSessionHas('success');
+    $discount = CreditNote::latest('id')->firstOrFail();
+    expect($discount->total)->toBe('25.96')->and($discount->additional_tax_total)->toBe('2.00')
+        ->and(collect($discount->lines->first()->additional_taxes)->pluck('code')->all())->toBe(['ISC-ADV']);
+
+    app(InventoryService::class)->dispatch(new StockLine($line->product_id, $i->warehouse_id, '2'), $i, $user);
+    app(InventoryService::class)->release($line->reservations()->whereNull('released_at')->firstOrFail());
+    $line->forceFill(['dispatched_quantity' => '2.0000', 'dispatched_cost' => '100.00'])->save();
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['reason' => 'return', 'lines' => [$row('1', '100')]]))->assertRedirect()->assertSessionHas('success');
+    $return = CreditNote::latest('id')->firstOrFail();
+    expect($return->total)->toBe('134.80')->and($return->additional_tax_total)->toBe('15.00') // 100 + 10 + 5 + 18 % × 110
+        ->and(collect($return->lines->first()->additional_taxes)->pluck('code')->sort()->values()->all())->toBe(['ISC-ADV', 'ISC-FIX']);
 });

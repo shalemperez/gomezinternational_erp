@@ -4,6 +4,7 @@ namespace App\Support\Documents;
 
 final readonly class LineInput
 {
+    /** @param list<string>|null $additionalTaxCodes */
     public function __construct(
         public int $productId,
         public string $quantity,
@@ -11,6 +12,8 @@ final readonly class LineInput
         public string $discountPercent = '0',
         public ?string $description = null,
         public ?string $itbisRate = null,
+        public ?array $additionalTaxCodes = null,
+        public bool $percentTaxesOnly = false,
     ) {}
 
     /** @param array{product_id: int|string, quantity: string, unit_price: string, discount_percent?: string|null, description?: string|null, itbis_rate?: string|null} $row */
