@@ -14,6 +14,7 @@ export type DocumentLineInput = {
     quantity: string;
     unit_price: string;
     discount_percent: string;
+    itbis_rate?: string;
 };
 export type ComputedLine = {
     product_id: number;
@@ -161,4 +162,63 @@ export type Invoice = DocumentTotals & {
     proforma?: { id: number; number: string } | null;
     canceller?: { name: string } | null;
     lines?: InvoiceLine[];
+};
+export type CreditNoteLine = {
+    id: number;
+    line_number: number;
+    invoice_line_id: number | null;
+    product_id: number;
+    lot_id: number | null;
+    description: string;
+    quantity: string;
+    unit_price: string;
+    discount_percent: string;
+    line_subtotal: string;
+    discount_amount: string;
+    taxable_base: string;
+    itbis_rate: string;
+    itbis_amount: string;
+    additional_taxes: { code: string; name: string; amount: string }[];
+    additional_tax_total: string;
+    line_total: string;
+    product?: { id: number; sku: string; name: string };
+    lot?: { id: number; code: string; expires_on: string | null } | null;
+};
+export type CreditNote = DocumentTotals & {
+    id: number;
+    number: string;
+    status: string;
+    fiscal_mode: string;
+    ncf: string;
+    ncf_type: string;
+    ncf_type_label: string;
+    ncf_expires_on: string | null;
+    modified_ncf: string | null;
+    invoice_id: number;
+    client_id: number;
+    salesperson_id: number;
+    warehouse_id: number | null;
+    currency_id: number;
+    exchange_rate: string;
+    issue_date: string;
+    reason: string;
+    reason_label: string;
+    returned_cost: string;
+    notes: string | null;
+    issued_at: string | null;
+    invoice?: { id: number; number: string; ncf: string | null } | null;
+    client?: {
+        id: number;
+        business_name: string;
+        tax_id: string | null;
+    } | null;
+    salesperson?: { id: number; name: string } | null;
+    currency?: { id: number; code: string } | null;
+    lines?: CreditNoteLine[];
+};
+export type CreditNoteLot = {
+    id: number;
+    code: string;
+    expires_on: string | null;
+    product_id: number;
 };

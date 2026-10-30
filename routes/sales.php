@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Sales\CreditNoteController;
 use App\Http\Controllers\Sales\InvoiceController;
 use App\Http\Controllers\Sales\ProformaController;
 use App\Http\Controllers\Sales\TotalsPreviewController;
@@ -15,6 +16,10 @@ Route::middleware(['auth'])->prefix('sales')->name('sales.')->group(function () 
     Route::post('invoices/{invoice}/send', [InvoiceController::class, 'send'])->name('invoices.send');
     Route::post('proformas/{proforma}/invoice', [InvoiceController::class, 'fromProforma'])->name('proformas.invoice');
     Route::resource('invoices', InvoiceController::class);
+
+    Route::get('credit-notes/export', [CreditNoteController::class, 'export'])->name('credit-notes.export');
+    Route::get('credit-notes/{creditNote}/pdf', [CreditNoteController::class, 'pdf'])->name('credit-notes.pdf');
+    Route::resource('credit-notes', CreditNoteController::class)->only(['index', 'create', 'store', 'show'])->parameters(['credit-notes' => 'creditNote']);
 
     Route::get('proformas/export', [ProformaController::class, 'export'])->name('proformas.export');
     Route::get('proformas/{proforma}/pdf', [ProformaController::class, 'pdf'])->name('proformas.pdf');

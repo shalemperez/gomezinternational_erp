@@ -192,3 +192,13 @@ function issuedInvoice(array $over = [], ?User $actor = null): Invoice
 
     return app(IssueInvoice::class)->handle($invoice, $actor);
 }
+
+function validCreditNotePayload(Invoice $invoice, array $over = []): array
+{
+    $line = $invoice->lines->first();
+
+    return array_merge([
+        'invoice_id' => $invoice->id, 'issue_date' => now()->toDateString(), 'reason' => 'discount', 'warehouse_id' => $invoice->warehouse_id, 'notes' => '',
+        'lines' => [['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => $line->description, 'quantity' => '1', 'unit_price' => '10', 'discount_percent' => '0', 'lot_id' => '']],
+    ], $over);
+}

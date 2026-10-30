@@ -26,6 +26,7 @@ import {
     formatMoney,
     formatNumber,
 } from '@/lib/format';
+import { create as createCreditNote } from '@/routes/sales/credit-notes';
 import {
     cancel,
     destroy,
@@ -54,6 +55,7 @@ type Props = {
         cancel: boolean;
         send: boolean;
         creditOverride: boolean;
+        creditNote: boolean;
     };
 };
 
@@ -168,6 +170,17 @@ export default function InvoiceShow({
             {invoice.issued_at && abilities.send && (
                 <Button variant="outline" onClick={() => setEmailOpen(true)}>
                     Enviar por correo
+                </Button>
+            )}
+            {abilities.creditNote && (
+                <Button variant="outline" asChild>
+                    <Link
+                        href={createCreditNote.url({
+                            query: { invoice: invoice.id },
+                        })}
+                    >
+                        Nota de crédito
+                    </Link>
                 </Button>
             )}
             {abilities.delete && (

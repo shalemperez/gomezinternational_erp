@@ -1,0 +1,102 @@
+<?php
+
+use App\Enums\InvoiceStatus;
+use App\Exceptions\ImmutableDocumentException;
+use App\Models\AccountingEvent;
+use App\Models\CreditNote;
+use App\Models\Invoice;
+use App\Models\NcfSequence;
+use App\Models\StockBalance;
+use App\Models\StockMovement;
+use App\Services\Inventory\InventoryService;
+use App\Support\Inventory\StockLine;
+use Database\Seeders\CurrencySeeder;
+use Database\Seeders\DocumentSequenceSeeder;
+use Spatie\Activitylog\Models\Activity;
+
+beforeEach(function () {
+    (new CurrencySeeder)->run();
+    (new DocumentSequenceSeeder)->run();
+    activeSequence('B04', ['range_to' => 100]);
+    activeSequence('B01', ['range_to' => 1000]); // issuedInvoice() only creates B01/B02 when no sequence is active
+    activeSequence('B02', ['range_to' => 1000]);
+});
+
+test('a discount credit note is issued with B04, reduces the invoice balance and records the event', function () {
+    $user = actingAsRole('accounting');
+    $i = issuedInvoice(); // 2 × 100 + 18 % = 236.00
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [['invoice_line_id' => $i->lines->first()->id, 'product_id' => $i->lines->first()->product_id, 'description' => 'Descuento', 'quantity' => '2', 'unit_price' => '10', 'discount_percent' => '0', 'lot_id' => '']]]))
+        ->assertRedirect()->assertSessionHas('success', 'Nota de crédito NC-000001 emitida con NCF B0400000001');
+    $n = CreditNote::firstOrFail();
+    expect($n->ncf)->toBe('B0400000001')->and($n->modified_ncf)->toBe($i->ncf)->and($n->total)->toBe('23.60')->and($n->ncf_expires_on)->toBeNull()->and($n->issued_at)->not->toBeNull()
+        ->and($i->fresh()->credited_amount)->toBe('23.60')->and($i->fresh()->balance)->toBe('212.40')->and($i->fresh()->status)->toBe(InvoiceStatus::Issued)
+        ->and(AccountingEvent::where('type', 'credit_note_issued')->first()->payload['modified_ncf'])->toBe($i->ncf)
+        ->and(Activity::inLog('credit_notes')->where('event', 'issued')->where('causer_id', $user->id)->exists())->toBeTrue()
+        ->and(Activity::inLog('invoices')->where('event', 'credit_note_applied')->where('subject_id', $i->id)->exists())->toBeTrue()
+        ->and(StockMovement::where('type', 'return')->count())->toBe(0);
+    expect(fn () => $n->update(['notes' => 'x']))->toThrow(ImmutableDocumentException::class);
+});
+
+test('a credit note cannot exceed the invoice balance nor the invoiced unit price', function () {
+    actingAsRole('accounting');
+    $i = issuedInvoice();
+    $i->forceFill(['paid_amount' => '200.00'])->save();
+    $i->refreshFinancials(); // balance 36.00
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [['invoice_line_id' => $i->lines->first()->id, 'product_id' => $i->lines->first()->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => '']]]))
+        ->assertRedirect()->assertSessionHas('error', 'La nota de crédito (RD$ 118.00) supera el saldo pendiente de la factura (RD$ 36.00).');
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [['invoice_line_id' => $i->lines->first()->id, 'product_id' => $i->lines->first()->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100.5', 'discount_percent' => '0', 'lot_id' => '']]]))
+        ->assertSessionHasErrors(['lines.0.unit_price' => 'La nota no puede superar el precio facturado (100.0000).']);
+    expect(CreditNote::count())->toBe(0)->and(NcfSequence::where('ncf_type', 'B04')->first()->next_number)->toBe(1);
+});
+
+test('a return cannot exceed the dispatched quantity and re-enters stock at the dispatch cost', function () {
+    $user = actingAsRole('accounting');
+    $i = issuedInvoice();
+    $line = $i->lines->first();
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['reason' => 'return', 'lines' => [['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => '']]]))
+        ->assertSessionHasErrors(['lines.0.quantity' => 'Solo se pueden devolver unidades ya despachadas (despachadas 0.0000, devueltas 0.0000).']);
+
+    // simulate a confirmed dispatch of 2 units at cost 50 (Task 13 does this through dispatches)
+    app(InventoryService::class)->dispatch(new StockLine($line->product_id, $i->warehouse_id, '2'), $i, $user);
+    app(InventoryService::class)->release($line->reservations()->whereNull('released_at')->firstOrFail());
+    $line->forceFill(['dispatched_quantity' => '2.0000', 'dispatched_cost' => '100.00'])->save();
+
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['reason' => 'return', 'lines' => [['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => '']]]))
+        ->assertRedirect()->assertSessionHas('success');
+    $m = StockMovement::where('type', 'return')->firstOrFail();
+    expect($m->quantity)->toBe('1.0000')->and($m->unit_cost)->toBe('50.0000')->and($m->reference_type)->toBe(CreditNote::class)
+        ->and(StockBalance::where('product_id', $line->product_id)->whereNull('lot_id')->first()->quantity)->toBe('999.0000')
+        ->and($line->fresh()->returned_quantity)->toBe('1.0000')->and($i->fresh()->balance)->toBe('118.00')
+        ->and(AccountingEvent::where('type', 'credit_note_issued')->first()->payload['returned_cost'])->toBe('50.00');
+});
+
+test('a correction releases the reservation of undispatched units', function () {
+    actingAsRole('accounting');
+    $i = issuedInvoice();
+    $line = $i->lines->first();
+    $svc = app(InventoryService::class);
+    expect($svc->available($line->product_id, $i->warehouse_id))->toBe('998.0000');
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['reason' => 'correction', 'lines' => [['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => '3', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => '']]]))
+        ->assertSessionHasErrors(['lines.0.quantity' => 'Cantidad pendiente de despacho: 2.0000.']);
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['reason' => 'correction', 'lines' => [['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => '']]]))
+        ->assertRedirect();
+    expect($svc->available($line->product_id, $i->warehouse_id))->toBe('1000.0000')->and($line->fresh()->credited_quantity)->toBe('2.0000')
+        ->and($i->fresh()->balance)->toBe('0.00')->and($i->fresh()->status)->toBe(InvoiceStatus::Paid);
+});
+
+test('credit notes require an open invoice, respect scoping and render index, show, pdf and export', function () {
+    actingAsRole('accounting');
+    $draft = Invoice::factory()->withLines(1)->create();
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($draft))->assertSessionHasErrors(['invoice_id' => 'La factura debe estar emitida.']);
+    $i = issuedInvoice();
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i))->assertRedirect();
+    $n = CreditNote::firstOrFail();
+    $this->get(route('sales.credit-notes.index'))->assertOk()->assertInertia(fn ($p) => $p->component('sales/credit-notes/index')->has('rows.data', 1));
+    $this->get(route('sales.credit-notes.show', $n))->assertOk()->assertInertia(fn ($p) => $p->component('sales/credit-notes/show')->where('creditNote.ncf', 'B0400000001')->has('history'));
+    $this->get(route('sales.credit-notes.create', ['invoice' => $i->id]))->assertOk()->assertInertia(fn ($p) => $p->component('sales/credit-notes/form')->where('invoice.id', $i->id)->has('invoice.lines', 1));
+    $this->get(route('sales.credit-notes.pdf', $n))->assertOk()->assertHeader('content-type', 'application/pdf');
+    $this->get(route('sales.credit-notes.export', ['format' => 'csv']))->assertOk();
+    salesUserWithSalesperson();
+    $this->get(route('sales.credit-notes.show', $n))->assertForbidden();
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i))->assertForbidden();
+});

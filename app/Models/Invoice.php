@@ -167,4 +167,10 @@ class Invoice extends Model implements HasDocumentLines
     {
         return $this->hasMany(InvoiceLine::class)->orderBy('line_number');
     }
+
+    /** @return HasMany<CreditNote, $this> */
+    public function creditNotes(): HasMany
+    {
+        return $this->hasMany(CreditNote::class);
+    }
 }

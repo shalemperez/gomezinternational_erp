@@ -18,6 +18,7 @@ export function useTotalsPreview(lines: DocumentLineInput[]): {
                 unit_price: line.unit_price,
                 discount_percent: line.discount_percent,
                 description: line.description,
+                itbis_rate: line.itbis_rate,
             }));
 
         if (payload.length === 0) {
