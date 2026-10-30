@@ -15,6 +15,7 @@ class DatabaseSeeder extends Seeder
             SuperAdminSeeder::class,
             WarehouseSeeder::class,
             DocumentSequenceSeeder::class,
+            EmailTemplateSeeder::class,
         ]);
     }
 }

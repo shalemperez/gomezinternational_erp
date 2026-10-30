@@ -16,4 +16,6 @@ export type Auth = {
     roles: string[];
     permissions: string[];
     impersonator: Impersonator | null;
+    gmail_connected: boolean;
+    gmail_email: string | null;
 };

@@ -16,4 +16,9 @@ return [
     'exchange_rates' => [
         'fetch_time' => '08:30', // app timezone
     ],
+
+    'gmail' => [
+        'driver' => env('GMAIL_DRIVER', env('APP_ENV') === 'production' ? 'google' : 'log'),
+        'scope' => 'https://www.googleapis.com/auth/gmail.send',
+    ],
 ];

@@ -9,6 +9,7 @@ import { UserInfo } from '@/components/user-info';
 import { useMobileNavigation } from '@/hooks/use-mobile-navigation';
 import { logout } from '@/routes';
 import { stop } from '@/routes/admin/impersonate';
+import { connect, disconnect } from '@/routes/auth/gmail';
 import type { User } from '@/types';
 
 type Props = {
@@ -35,6 +36,17 @@ export function UserMenuContent({ user }: Props) {
             {auth.impersonator && (
                 <DropdownMenuItem onSelect={() => router.delete(stop.url())}>
                     Volver a mi cuenta
+                </DropdownMenuItem>
+            )}
+            {auth.gmail_connected ? (
+                <DropdownMenuItem
+                    onSelect={() => router.delete(disconnect.url())}
+                >
+                    Desconectar Gmail
+                </DropdownMenuItem>
+            ) : (
+                <DropdownMenuItem asChild>
+                    <a href={connect.url()}>Conectar Gmail</a>
                 </DropdownMenuItem>
             )}
             <DropdownMenuItem asChild>

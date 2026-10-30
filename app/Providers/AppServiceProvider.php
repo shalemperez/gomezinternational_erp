@@ -2,9 +2,12 @@
 
 namespace App\Providers;
 
+use App\Contracts\GmailSender;
 use App\Listeners\LogAccessChanges;
 use App\Models\ActivityLog;
 use App\Models\User;
+use App\Services\Mail\GoogleGmailSender;
+use App\Services\Mail\LogGmailSender;
 use App\Services\Settings;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Middleware\TrustProxies;
@@ -28,6 +31,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(Settings::class);
+        $this->app->bind(GmailSender::class, fn () => config('erp.gmail.driver') === 'google' ? $this->app->make(GoogleGmailSender::class) : $this->app->make(LogGmailSender::class));
     }
 
     /**

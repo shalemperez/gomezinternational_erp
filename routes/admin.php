@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Admin\ActivityLogController;
+use App\Http\Controllers\Admin\EmailTemplateController;
 use App\Http\Controllers\Admin\ImpersonateController;
 use App\Http\Controllers\Admin\NcfSequenceController;
 use App\Http\Controllers\Admin\RoleController;
@@ -18,6 +19,8 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
     Route::resource('ncf-sequences', NcfSequenceController::class)->except(['show', 'destroy'])->parameters(['ncf-sequences' => 'ncfSequence']);
+    Route::get('email-templates', [EmailTemplateController::class, 'index'])->name('email-templates.index');
+    Route::put('email-templates/{emailTemplate:key}', [EmailTemplateController::class, 'update'])->name('email-templates.update');
     Route::get('activity-log/export', [ActivityLogController::class, 'export'])->name('activity-log.export');
     Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log.index');
     Route::middleware('permission:catalog.clients.import|catalog.suppliers.import|catalog.products.import|catalog.price-lists.import|inventory.initial-stock.import|sales.historical-invoices.import')->group(function () {

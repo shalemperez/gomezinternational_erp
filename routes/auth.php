@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Auth\GmailConnectController;
 use App\Http\Controllers\Auth\GoogleLoginController;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Auth\LogoutController;
@@ -12,3 +13,9 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::post('logout', LogoutController::class)->middleware('auth')->name('logout');
+
+Route::middleware('auth')->group(function () {
+    Route::get('auth/gmail/connect', [GmailConnectController::class, 'connect'])->name('auth.gmail.connect');
+    Route::get('auth/gmail/callback', [GmailConnectController::class, 'callback'])->name('auth.gmail.callback');
+    Route::delete('auth/gmail', [GmailConnectController::class, 'disconnect'])->name('auth.gmail.disconnect');
+});

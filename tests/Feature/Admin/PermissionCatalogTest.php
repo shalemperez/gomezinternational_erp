@@ -79,6 +79,7 @@ test('shared props expose roles and permissions', function () {
     $this->get(route('dashboard'))->assertInertia(fn ($page) => $page
         ->where('auth.roles', ['sales'])
         ->where('auth.impersonator', null)
+        ->where('auth.gmail_connected', false)
         ->has('auth.permissions')
         ->where('flash.success', null));
 });
