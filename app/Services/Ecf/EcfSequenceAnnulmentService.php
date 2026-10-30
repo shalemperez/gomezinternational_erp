@@ -22,8 +22,8 @@ use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 /**
- * Annuls unused electronic e-NCF ranges (ANECF): collects the ranges, signs and sends them to the DGII, and advances
- * the sequences that an accepted annulment covered.
+ * Annuls unused electronic e-NCF ranges (ANECF): collects the ranges, signs and sends them to the DGII, and shrinks the
+ * sequences whose unused tail is under annulment, so their numbers are never issued.
  */
 class EcfSequenceAnnulmentService
 {
@@ -49,7 +49,12 @@ class EcfSequenceAnnulmentService
             ->get();
     }
 
-    /** @throws EcfException when the range is not electronic, lies outside every sequence, was used or overlaps an annulment */
+    /**
+     * Only the unused tail of a sequence can be annulled (GC-25): the range must end at the sequence end and start at or
+     * after its next number. Adding it shrinks the sequence to end before the range, so its numbers are never issued.
+     *
+     * @throws EcfException when the range is not electronic, is not the unused tail of a sequence, was used or overlaps an annulment
+     */
     public function addRange(NcfType $type, int $from, int $to, string $reason, User $actor): EcfAnnulmentRange
     {
         if (! $type->isElectronic()) {
@@ -60,10 +65,15 @@ class EcfSequenceAnnulmentService
         return DB::transaction(function () use ($type, $from, $to, $reason, $actor, $environment): EcfAnnulmentRange {
             $this->lockElectronicSequences($environment);
 
-            $covered = NcfSequence::query()->where('ncf_type', $type->value)->where('environment', $environment)->where('is_active', true)
-                ->where('range_from', '<=', $from)->where('range_to', '>=', $to)->exists();
-            if (! $covered) {
+            $sequence = NcfSequence::query()->where('ncf_type', $type->value)->where('environment', $environment)->where('is_active', true)
+                ->where('range_from', '<=', $from)->where('range_to', '>=', $to)->orderBy('range_from')->first();
+            if ($sequence === null) {
                 throw new EcfException("El rango no pertenece a ninguna secuencia {$type->value} registrada para este ambiente.");
+            }
+
+            if ($from < $sequence->next_number || $to !== (int) $sequence->range_to) {
+                throw new EcfException('Solo se puede anular el tramo final sin usar de la secuencia: el rango debe empezar en '
+                    ."{$this->encf($type, $sequence->next_number)} o después y terminar en {$this->encf($type, (int) $sequence->range_to)}.");
             }
 
             $firstUsed = $this->firstUsedEncf($type, $from, $to);
@@ -78,13 +88,51 @@ class EcfSequenceAnnulmentService
             $range = EcfAnnulmentRange::query()->create([
                 'ncf_type' => $type->value, 'environment' => $environment, 'range_from' => $from, 'range_to' => $to,
                 'quantity' => $to - $from + 1, 'reason' => $reason,
+                'ncf_sequence_id' => $sequence->id, 'original_range_to' => (int) $sequence->range_to,
             ]);
 
+            if ($from < 1) {
+                throw new EcfException('El inicio del rango debe ser mayor que cero.');
+            }
+
+            $sequence->range_to = $from - 1;
+            if ($sequence->next_number > $sequence->range_to) {
+                $sequence->exhausted_at = now();
+            }
+            $sequence->save();
+
             activity('ecf_annulment_ranges')->causedBy($actor)->performedOn($range)->event('created')
-                ->withProperties(['ncf_type' => $type->value, 'range_from' => $from, 'range_to' => $to])
+                ->withProperties(['ncf_type' => $type->value, 'range_from' => $from, 'range_to' => $to, 'original_range_to' => $range->original_range_to])
                 ->log('Rango agregado a la anulación pendiente');
 
             return $range;
+        });
+    }
+
+    /**
+     * Deletes a pending range that does not come from a cancelled invoice, and gives a tail range back to its sequence.
+     *
+     * @throws EcfException when the range is not pending or comes from a cancelled invoice
+     */
+    public function deleteRange(EcfAnnulmentRange $range, User $actor): void
+    {
+        DB::transaction(function () use ($range, $actor): void {
+            $this->lockElectronicSequences($range->environment);
+
+            $pending = EcfAnnulmentRange::query()->whereKey($range->id)->whereNull('ecf_annulment_id')->lockForUpdate()->first();
+            if ($pending === null) {
+                throw new EcfException('Solo se eliminan rangos pendientes');
+            }
+            if ($pending->ecf_document_id !== null) {
+                throw new EcfException('Este rango proviene de una factura anulada y debe enviarse a la DGII.');
+            }
+
+            $this->restoreTail($pending);
+
+            activity('ecf_annulments')->causedBy($actor)->performedOn($pending)->event('range_deleted')
+                ->withProperties(['ncf_type' => $pending->ncf_type, 'range_from' => (int) $pending->range_from, 'range_to' => (int) $pending->range_to])
+                ->log('Rango pendiente eliminado');
+            $pending->delete();
         });
     }
 
@@ -136,9 +184,10 @@ class EcfSequenceAnnulmentService
             $result = $this->ecf->provider()->annul($annulment, $signed->xml);
         } catch (\Throwable $e) {
             $error = mb_substr($e->getMessage(), 0, 500);
-            DB::transaction(function () use ($annulment, $ranges, $actor, $error) {
+            DB::transaction(function () use ($annulment, $ranges, $actor, $error, $environment) {
+                $this->lockElectronicSequences($environment->value);
                 $annulment->update(['status' => 'failed', 'response' => ['error' => $error]]);
-                $ranges->each(fn (EcfAnnulmentRange $range) => $range->update(['ecf_annulment_id' => null]));
+                $this->releaseRanges($ranges);
 
                 activity('ecf_annulments')->causedBy($actor)->performedOn($annulment)->event('failed')
                     ->withProperties(['error' => $error])
@@ -162,10 +211,8 @@ class EcfSequenceAnnulmentService
                 'sent_at' => $accepted ? now() : null,
             ]);
 
-            if ($accepted) {
-                $this->advanceSequences($ranges, $environment->value);
-            } else {
-                $ranges->each(fn (EcfAnnulmentRange $range) => $range->update(['ecf_annulment_id' => null]));
+            if (! $accepted) {
+                $this->releaseRanges($ranges);
             }
 
             activity('ecf_annulments')->causedBy($actor)->performedOn($annulment)->event($accepted ? 'accepted' : 'rejected')
@@ -213,24 +260,43 @@ class EcfSequenceAnnulmentService
             ->exists();
     }
 
-    /** Moves each sequence past the accepted ranges that cover its next number, as the DGII now treats those numbers as annulled. */
-    /** @param  Collection<int, EcfAnnulmentRange>  $ranges */
-    private function advanceSequences(Collection $ranges, string $environment): void
+    /**
+     * Frees the ranges of cancelled invoices, and gives the tail ranges back to their sequences. Tail ranges keep their
+     * link to the annulment as history; the user re-adds them to retry.
+     *
+     * @param  Collection<int, EcfAnnulmentRange>  $ranges
+     */
+    private function releaseRanges(Collection $ranges): void
     {
-        foreach ($ranges as $range) {
-            $sequence = NcfSequence::query()->where('ncf_type', $range->ncf_type)->where('environment', $environment)->where('is_active', true)
-                ->where('range_from', '<=', $range->range_from)->where('range_to', '>=', $range->range_to)
-                ->orderBy('range_from')->first();
-            if ($sequence === null || $sequence->next_number < $range->range_from || $sequence->next_number > $range->range_to) {
-                continue;
+        $ranges->each(function (EcfAnnulmentRange $range): void {
+            if ($range->ecf_document_id !== null) {
+                $range->update(['ecf_annulment_id' => null]);
+            } else {
+                $this->restoreTail($range);
             }
+        });
+    }
 
-            $sequence->next_number = (int) $range->range_to + 1;
-            if ($sequence->next_number > $sequence->range_to) {
-                $sequence->exhausted_at = now();
-            }
-            $sequence->save();
+    /**
+     * Gives a released tail back to its sequence; skipped when a later tail already shrank the sequence further (those
+     * numbers then stay unused, never reissued).
+     */
+    private function restoreTail(EcfAnnulmentRange $range): void
+    {
+        if ($range->ncf_sequence_id === null || $range->original_range_to === null) {
+            return;
         }
+
+        $sequence = NcfSequence::query()->whereKey($range->ncf_sequence_id)->lockForUpdate()->first();
+        if ($sequence === null || (int) $sequence->range_to !== $range->range_from - 1) {
+            return;
+        }
+
+        $sequence->range_to = $range->original_range_to;
+        if ($sequence->next_number <= $sequence->range_to) {
+            $sequence->exhausted_at = null;
+        }
+        $sequence->save();
     }
 
     /**

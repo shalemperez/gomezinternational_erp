@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Fiscal;
 
 use App\Enums\NcfType;
+use App\Exceptions\EcfException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Fiscal\StoreEcfAnnulmentRangeRequest;
 use App\Models\EcfAnnulment;
@@ -13,7 +14,6 @@ use App\Services\Ecf\EcfService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Middleware;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -64,28 +64,15 @@ class EcfAnnulmentController extends Controller
     }
 
     #[Middleware('permission:fiscal.ecf.annul')]
-    public function destroyRange(Request $request, EcfAnnulmentRange $range): RedirectResponse
+    public function destroyRange(Request $request, EcfSequenceAnnulmentService $annulments, EcfAnnulmentRange $range): RedirectResponse
     {
-        $error = DB::transaction(function () use ($request, $range): ?string {
-            $pending = EcfAnnulmentRange::query()->whereKey($range->id)->whereNull('ecf_annulment_id')->lockForUpdate()->first();
-            if ($pending === null) {
-                return 'Solo se eliminan rangos pendientes';
-            }
-            if ($pending->ecf_document_id !== null) {
-                return 'Este rango proviene de una factura anulada y debe enviarse a la DGII.';
-            }
+        try {
+            $annulments->deleteRange($range, $this->actor($request));
+        } catch (EcfException $e) {
+            return redirect()->route('fiscal.ecf-annulments.index')->with('error', $e->getMessage());
+        }
 
-            activity('ecf_annulments')->causedBy($request->user())->performedOn($pending)->event('range_deleted')
-                ->withProperties(['ncf_type' => $pending->ncf_type, 'range_from' => (int) $pending->range_from, 'range_to' => (int) $pending->range_to])
-                ->log('Rango pendiente eliminado');
-            $pending->delete();
-
-            return null;
-        });
-
-        return $error === null
-            ? redirect()->route('fiscal.ecf-annulments.index')->with('success', 'Rango eliminado')
-            : redirect()->route('fiscal.ecf-annulments.index')->with('error', $error);
+        return redirect()->route('fiscal.ecf-annulments.index')->with('success', 'Rango eliminado');
     }
 
     #[Middleware('permission:fiscal.ecf.annul')]
