@@ -15,7 +15,7 @@ export type RoleWithPermissions = {
     permissions: string[];
 };
 export type PermissionOption = { name: string; label: string; module: string };
-export type SettingsValues = Record<string, string | null>;
+export type SettingsValues = Record<string, string | number | null>;
 export type ActivityRow = {
     id: number;
     created_at: string;

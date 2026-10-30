@@ -1,9 +1,21 @@
 <?php
 
+use App\Actions\Sales\IssueInvoice;
+use App\Actions\Sales\SaveInvoice;
+use App\Enums\StockMovementType;
+use App\Models\Client;
 use App\Models\Currency;
+use App\Models\FinancialAccount;
+use App\Models\Invoice;
+use App\Models\NcfSequence;
+use App\Models\Product;
+use App\Models\Salesperson;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
+use App\Models\Warehouse;
+use App\Services\Inventory\InventoryService;
 use App\Support\FiscalId;
+use App\Support\Inventory\StockLine;
 use Database\Seeders\PermissionSeeder;
 use Spatie\Permission\Models\Role;
 
@@ -118,4 +130,103 @@ function validFinancialAccountPayload(array $over = []): array
     $currency = Currency::query()->where('is_base', true)->firstOr(fn () => Currency::factory()->create(['code' => 'DOP', 'is_base' => true]));
 
     return array_merge(['type' => 'bank', 'name' => 'Cuenta operativa', 'bank_name' => 'Banco Popular', 'account_number' => '0123456789', 'currency_id' => $currency->id, 'is_active' => 'on'], $over);
+}
+
+function validNcfSequencePayload(array $over = []): array
+{
+    return array_merge(['ncf_type' => 'B01', 'range_from' => 1, 'range_to' => 100, 'expires_on' => now()->addYear()->endOfYear()->toDateString(), 'authorization_number' => '7001234567', 'notes' => '', 'is_active' => 'on'], $over);
+}
+
+function activeSequence(string $type = 'B01', array $over = []): NcfSequence
+{
+    return NcfSequence::factory()->create(array_merge(['ncf_type' => $type, 'range_from' => 1, 'range_to' => 100, 'next_number' => 1, 'expires_on' => in_array($type, ['B02', 'B04'], true) ? null : now()->addYear()->toDateString(), 'is_active' => true], $over));
+}
+
+/** A sales-role user linked to a salesperson (the shape every scoped-document test needs). */
+function salesUserWithSalesperson(): array
+{
+    $user = actingAsRole('sales');
+    $salesperson = Salesperson::factory()->create(['user_id' => $user->id]);
+
+    return ['user' => $user, 'salesperson' => $salesperson];
+}
+
+function validProformaPayload(array $over = []): array
+{
+    $client = Client::factory()->create();
+    $product = Product::factory()->create(['itbis_rate' => '18.00']);
+
+    return array_merge([
+        'client_id' => $client->id, 'salesperson_id' => '', 'currency_id' => Currency::base()->id, 'issue_date' => now()->toDateString(),
+        'valid_until' => now()->addDays(15)->toDateString(), 'price_list_id' => '', 'notes' => '',
+        'lines' => [['product_id' => $product->id, 'description' => '', 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '0']],
+    ], $over);
+}
+
+function validInvoicePayload(array $over = []): array
+{
+    $client = Client::factory()->create(['credit_days' => 30, 'credit_limit' => '0']);
+    $product = Product::factory()->create(['itbis_rate' => '18.00']);
+    $warehouse = Warehouse::default() ?? Warehouse::factory()->create(['is_default' => true]);
+
+    return array_merge([
+        'client_id' => $client->id, 'salesperson_id' => '', 'warehouse_id' => $warehouse->id, 'currency_id' => Currency::base()->id,
+        'issue_date' => now()->toDateString(), 'payment_terms' => 'credit', 'credit_days' => 30, 'notes' => '',
+        'lines' => [['product_id' => $product->id, 'description' => '', 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '0']],
+    ], $over);
+}
+
+/** Loads stock for every product of the payload, creates the draft through SaveInvoice and issues it. */
+function issuedInvoice(array $over = [], ?User $actor = null): Invoice
+{
+    $actor ??= User::factory()->create();
+    $payload = validInvoicePayload($over);
+    foreach ($payload['lines'] as $line) {
+        app(InventoryService::class)->receive(new StockLine($line['product_id'], $payload['warehouse_id'], '1000', '50'), StockMovementType::Initial, $actor, $actor);
+    }
+    if (! NcfSequence::query()->where('is_active', true)->exists()) {
+        activeSequence('B01', ['range_to' => 1000]);
+        activeSequence('B02', ['range_to' => 1000]);
+    }
+    $payload['salesperson_id'] = $payload['salesperson_id'] ?: Salesperson::factory()->create()->id;
+    $invoice = app(SaveInvoice::class)->handle($payload, $actor->givePermissionTo('sales.invoices.view-all'));
+
+    return app(IssueInvoice::class)->handle($invoice, $actor);
+}
+
+function validCreditNotePayload(Invoice $invoice, array $over = []): array
+{
+    $line = $invoice->lines->first();
+
+    return array_merge([
+        'invoice_id' => $invoice->id, 'reason' => 'discount', 'warehouse_id' => $invoice->warehouse_id, 'notes' => '',
+        'lines' => [['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => $line->description, 'quantity' => '1', 'unit_price' => '10', 'discount_percent' => '0', 'lot_id' => '']],
+    ], $over);
+}
+
+function validDebitNotePayload(Invoice $invoice, array $over = []): array
+{
+    return array_merge([
+        'invoice_id' => $invoice->id, 'reason' => 'freight', 'notes' => '',
+        'lines' => [['product_id' => Product::factory()->create(['name' => 'Flete', 'itbis_rate' => '18.00'])->id, 'description' => 'Flete Santiago', 'quantity' => '1', 'unit_price' => '500', 'discount_percent' => '0']],
+    ], $over);
+}
+
+function validDispatchPayload(Invoice $invoice, array $over = []): array
+{
+    return array_merge([
+        'invoice_id' => $invoice->id, 'dispatch_date' => now()->toDateString(), 'driver_name' => 'Pedro', 'vehicle' => 'A123456', 'notes' => '',
+        'lines' => $invoice->lines->map(fn ($l) => ['invoice_line_id' => $l->id, 'quantity' => $l->quantity, 'lot_id' => ''])->all(),
+    ], $over);
+}
+
+function validReceiptPayload(Invoice $invoice, array $over = []): array
+{
+    $account = FinancialAccount::factory()->create(['currency_id' => $invoice->currency_id]);
+
+    return array_merge([
+        'client_id' => $invoice->client_id, 'currency_id' => $invoice->currency_id, 'receipt_date' => now()->toDateString(), 'payment_method' => 'transfer', 'financial_account_id' => $account->id,
+        'reference' => 'TRX-1', 'amount_received' => $invoice->balance, 'retention_itbis' => '0', 'retention_isr' => '0', 'notes' => '',
+        'applications' => [['invoice_id' => $invoice->id, 'amount' => $invoice->balance]],
+    ], $over);
 }

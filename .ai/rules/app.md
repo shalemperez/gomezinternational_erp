@@ -10,3 +10,6 @@ All amounts, quantities, rates are decimal strings handled by App\Support\Money\
 
 ## Audit everything
 Every model uses App\Models\Concerns\LogsModelActivity; every action/transition/export/import/auth event writes an activity() row with a Spanish description; activity_log is append-only (model guard + PostgreSQL trigger). Every new model or action needs a test asserting its audit rows.
+
+## Sales documents
+Issued documents are immutable (`ImmutableWhenIssued`); corrections are credit/debit notes. Every state transition writes `activity()` plus `AccountingEventRecorder` when it has accounting meaning. Money goes through `DocumentTotalsCalculator`/`Decimal`. State errors throw `DocumentStateException`, which the exception handler flashes.

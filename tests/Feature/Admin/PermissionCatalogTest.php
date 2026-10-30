@@ -27,7 +27,19 @@ test('seeder creates all roles and permissions idempotently', function () {
         ->and(Role::findByName('accounting')->hasPermissionTo('catalog.tax-ids.override-validation'))->toBeFalse()
         ->and(Role::findByName('accounting')->hasPermissionTo('finance.accounts.export'))->toBeTrue()
         ->and(Role::findByName('accounting')->hasPermissionTo('admin.activity-log.export'))->toBeFalse()
-        ->and(Role::findByName('owner')->hasPermissionTo('admin.activity-log.export'))->toBeTrue();
+        ->and(Role::findByName('owner')->hasPermissionTo('admin.activity-log.export'))->toBeTrue()
+        ->and(Permission::count())->toBe(120)
+        ->and(Role::findByName('warehouse')->hasPermissionTo('inventory.stock.export'))->toBeFalse()
+        ->and(Role::findByName('sales')->hasPermissionTo('sales.invoices.issue'))->toBeTrue()
+        ->and(Role::findByName('sales')->hasPermissionTo('sales.invoices.cancel'))->toBeFalse()
+        ->and(Role::findByName('sales')->hasPermissionTo('sales.proformas.view-all'))->toBeFalse()
+        ->and(Role::findByName('accounting')->hasPermissionTo('sales.receipts.cancel'))->toBeTrue()
+        ->and(Role::findByName('warehouse')->hasPermissionTo('inventory.dispatches.confirm'))->toBeTrue()
+        ->and(Role::findByName('warehouse')->hasPermissionTo('inventory.stock.view-costs'))->toBeFalse()
+        ->and(Role::findByName('owner')->hasPermissionTo('fiscal.mode.manage'))->toBeTrue()
+        ->and(Role::findByName('management')->hasPermissionTo('fiscal.mode.manage'))->toBeFalse()
+        ->and(Role::findByName('management')->hasPermissionTo('inventory.dispatches.expired-override'))->toBeTrue()
+        ->and(Role::findByName('warehouse')->hasPermissionTo('inventory.dispatches.expired-override'))->toBeFalse();
 });
 
 test('management has no admin permissions', function () {
@@ -69,6 +81,7 @@ test('shared props expose roles and permissions', function () {
     $this->get(route('dashboard'))->assertInertia(fn ($page) => $page
         ->where('auth.roles', ['sales'])
         ->where('auth.impersonator', null)
+        ->where('auth.gmail_connected', false)
         ->has('auth.permissions')
         ->where('flash.success', null));
 });

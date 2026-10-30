@@ -48,6 +48,8 @@ class HandleInertiaRequests extends Middleware
                 'roles' => $user ? $user->getRoleNames()->values()->all() : [],
                 'permissions' => $user ? $user->getAllPermissions()->pluck('name')->values()->all() : [],
                 'impersonator' => $impersonator ? ['id' => $impersonator->id, 'name' => $impersonator->name] : null,
+                'gmail_connected' => $user ? $user->gmail_connected_at !== null : false,
+                'gmail_email' => $user?->gmail_email,
             ],
             'flash' => [
                 'success' => fn () => $request->session()->get('success'),

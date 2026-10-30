@@ -28,6 +28,9 @@ class UpdateSettingsRequest extends FormRequest
             // Laravel's `url` rule rejects the {currency}/{date} placeholders, hence the regex.
             'exchange_rates.http_json.url' => ['nullable', 'string', 'max:500', 'required_if:exchange_rates.source,http_json', 'regex:/^https?:\/\/\S+$/i'],
             'exchange_rates.http_json.json_path' => ['nullable', 'string', 'max:100', 'required_if:exchange_rates.source,http_json'],
+            'fiscal.consumo_id_threshold' => ['required', 'numeric', 'min:0', 'max:999999999999.99'],
+            'sales.proforma_validity_days' => ['required', 'integer', 'between:1,365'],
+            'inventory.expiring_days' => ['required', 'integer', 'between:1,365'],
         ];
     }
 
@@ -38,6 +41,8 @@ class UpdateSettingsRequest extends FormRequest
             'company.name' => 'el nombre', 'company.legal_name' => 'la razón social', 'company.rnc' => 'el RNC', 'company.address' => 'la dirección',
             'company.phone' => 'el teléfono', 'company.email' => 'el correo electrónico', 'logo' => 'el logo', 'exchange_rates.source' => 'la fuente',
             'exchange_rates.http_json.url' => 'la URL', 'exchange_rates.http_json.json_path' => 'la ruta JSON',
+            'fiscal.consumo_id_threshold' => 'el umbral de facturas de consumo', 'sales.proforma_validity_days' => 'los días de validez de proformas',
+            'inventory.expiring_days' => 'los días de alerta de vencimiento',
         ];
     }
 }

@@ -2,9 +2,22 @@
 
 namespace App\Providers;
 
+use App\Contracts\GmailSender;
 use App\Listeners\LogAccessChanges;
 use App\Models\ActivityLog;
+use App\Models\CreditNote;
+use App\Models\DebitNote;
+use App\Models\Invoice;
+use App\Models\Proforma;
+use App\Models\Receipt;
 use App\Models\User;
+use App\Policies\CreditNotePolicy;
+use App\Policies\DebitNotePolicy;
+use App\Policies\InvoicePolicy;
+use App\Policies\ProformaPolicy;
+use App\Policies\ReceiptPolicy;
+use App\Services\Mail\GoogleGmailSender;
+use App\Services\Mail\LogGmailSender;
 use App\Services\Settings;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Middleware\TrustProxies;
@@ -28,6 +41,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(Settings::class);
+        $this->app->bind(GmailSender::class, fn () => config('erp.gmail.driver') === 'google' ? $this->app->make(GoogleGmailSender::class) : $this->app->make(LogGmailSender::class));
     }
 
     /**
@@ -39,6 +53,11 @@ class AppServiceProvider extends ServiceProvider
         self::configureTrustedProxies();
 
         Gate::before(fn (User $user, string $ability) => $user->isSuperAdmin() ? true : null);
+        Gate::policy(Proforma::class, ProformaPolicy::class);
+        Gate::policy(Invoice::class, InvoicePolicy::class);
+        Gate::policy(CreditNote::class, CreditNotePolicy::class);
+        Gate::policy(DebitNote::class, DebitNotePolicy::class);
+        Gate::policy(Receipt::class, ReceiptPolicy::class);
 
         ActivityLog::creating(function (ActivityLog $activity): void {
             // `request.id` is bound only by AssignRequestId (HTTP); console and queue work have none.

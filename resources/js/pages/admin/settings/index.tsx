@@ -2,6 +2,7 @@ import { Form, Head } from '@inertiajs/react';
 import { FormField } from '@/components/erp/form-field';
 import { PageHeader } from '@/components/erp/page-header';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import {
     Select,
@@ -18,6 +19,7 @@ type Props = {
     values: SettingsValues;
     canManage: boolean;
     logoUrl: string | null;
+    fiscalMode: string;
 };
 
 export default function SettingsIndex({ values, canManage, logoUrl }: Props) {
@@ -169,11 +171,11 @@ export default function SettingsIndex({ values, canManage, logoUrl }: Props) {
                                     >
                                         <Select
                                             name="exchange_rates[source]"
-                                            defaultValue={
+                                            defaultValue={String(
                                                 values[
                                                     'exchange_rates.source'
-                                                ] ?? ''
-                                            }
+                                                ] ?? '',
+                                            )}
                                             disabled={!canManage}
                                         >
                                             <SelectTrigger id="exchange_source">
@@ -233,6 +235,90 @@ export default function SettingsIndex({ values, canManage, logoUrl }: Props) {
                                     </FormField>
                                 </TabsContent>
                             </Tabs>
+                            <Card>
+                                <CardHeader>
+                                    <CardTitle>Ventas e inventario</CardTitle>
+                                </CardHeader>
+                                <CardContent className="grid gap-4">
+                                    <FormField
+                                        label="Umbral de facturas de consumo que requieren RNC/cédula (RD$)"
+                                        htmlFor="fiscal_consumo_id_threshold"
+                                        error={
+                                            errors[
+                                                'fiscal.consumo_id_threshold'
+                                            ]
+                                        }
+                                        required
+                                    >
+                                        <Input
+                                            id="fiscal_consumo_id_threshold"
+                                            name="fiscal[consumo_id_threshold]"
+                                            type="number"
+                                            step="0.01"
+                                            min="0"
+                                            defaultValue={
+                                                values[
+                                                    'fiscal.consumo_id_threshold'
+                                                ] ?? ''
+                                            }
+                                            disabled={!canManage}
+                                            required
+                                        />
+                                    </FormField>
+                                    <FormField
+                                        label="Días de validez por defecto de las proformas"
+                                        htmlFor="sales_proforma_validity_days"
+                                        error={
+                                            errors[
+                                                'sales.proforma_validity_days'
+                                            ]
+                                        }
+                                        required
+                                    >
+                                        <Input
+                                            id="sales_proforma_validity_days"
+                                            name="sales[proforma_validity_days]"
+                                            type="number"
+                                            min="1"
+                                            max="365"
+                                            defaultValue={
+                                                values[
+                                                    'sales.proforma_validity_days'
+                                                ] ?? ''
+                                            }
+                                            disabled={!canManage}
+                                            required
+                                        />
+                                    </FormField>
+                                    <FormField
+                                        label="Días de anticipación para alertas de vencimiento de lotes"
+                                        htmlFor="inventory_expiring_days"
+                                        error={
+                                            errors['inventory.expiring_days']
+                                        }
+                                        required
+                                    >
+                                        <Input
+                                            id="inventory_expiring_days"
+                                            name="inventory[expiring_days]"
+                                            type="number"
+                                            min="1"
+                                            max="365"
+                                            defaultValue={
+                                                values[
+                                                    'inventory.expiring_days'
+                                                ] ?? ''
+                                            }
+                                            disabled={!canManage}
+                                            required
+                                        />
+                                    </FormField>
+                                    <p className="text-sm text-muted-foreground">
+                                        Modo fiscal: NCF tradicional (el cambio
+                                        a e-CF llega en la fase 3)
+                                    </p>
+                                </CardContent>
+                            </Card>
                             {canManage && (
                                 <div className="flex gap-2">
                                     <Button type="submit" disabled={processing}>

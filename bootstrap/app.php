@@ -1,5 +1,11 @@
 <?php
 
+use App\Exceptions\DocumentStateException;
+use App\Exceptions\FiscalNumberingException;
+use App\Exceptions\GmailNotConnectedException;
+use App\Exceptions\ImmutableDocumentException;
+use App\Exceptions\InventoryException;
+use App\Exceptions\MissingExchangeRateException;
 use App\Http\Middleware\AssignRequestId;
 use App\Http\Middleware\EnsureUserIsActive;
 use App\Http\Middleware\HandleAppearance;
@@ -41,4 +47,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*') || $request->expectsJson(),
         );
+
+        $exceptions->render(function (RuntimeException $e, Request $request) {
+            $flashable = [DocumentStateException::class, InventoryException::class, FiscalNumberingException::class, ImmutableDocumentException::class, GmailNotConnectedException::class, MissingExchangeRateException::class];
+            foreach ($flashable as $class) {
+                if ($e instanceof $class && ! $request->expectsJson()) {
+                    return back()->with('error', $e->getMessage());
+                }
+            }
+
+            return null;
+        });
     })->create();
