@@ -8,6 +8,7 @@ use App\Imports\ImporterRegistry;
 use App\Models\ImportBatch;
 use App\Models\ImportBatchRow;
 use App\Models\User;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -128,7 +129,14 @@ class ImportService
             $locked->rows()->where('is_valid', true)->orderBy('row_number')->chunkById(200, function ($rows) use ($importer, $meta, &$created, &$updated): void {
                 foreach ($rows as $row) {
                     $existing = $importer->findExisting($row->data, $meta);
-                    $importer->persist($row->data, $existing, $meta);
+                    try {
+                        $importer->persist($row->data, $existing, $meta);
+                    } catch (QueryException $e) {
+                        if ($e->getCode() === '23505') {
+                            throw new UnprocessableEntityHttpException("La fila {$row->row_number} no se pudo importar: el código, SKU o RNC/cédula ya existe (fue registrado después de la vista previa). Genera la vista previa de nuevo.");
+                        }
+                        throw $e;
+                    }
                     $existing ? $updated++ : $created++;
                 }
             });

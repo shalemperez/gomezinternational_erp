@@ -72,7 +72,12 @@ class ClientsImporter extends BaseImporter
             $taxpayerMap[Str::slug($case->value)] = $case->value;
         }
         $row['taxpayer_type'] = $taxpayerMap[Str::slug((string) ($row['taxpayer_type'] ?? ''))] ?? $row['taxpayer_type'];
-        $row['tax_id'] = $row['tax_id_type'] === 'none' || empty($row['tax_id']) ? null : FiscalId::normalize((string) $row['tax_id']);
+        $rawTaxId = $row['tax_id'] ?? null;
+        $digits = $rawTaxId === null ? '' : FiscalId::normalize((string) $rawTaxId);
+        if ($digits !== '' && is_numeric($rawTaxId)) { // a numeric cell lost its leading zeros
+            $digits = str_pad($digits, $row['tax_id_type'] === 'cedula' ? 11 : 9, '0', STR_PAD_LEFT);
+        }
+        $row['tax_id'] = $row['tax_id_type'] === 'none' || $digits === '' ? null : $digits;
         $row['currency_code'] = isset($row['currency_code']) ? strtoupper($row['currency_code']) : null;
         $row['email'] = isset($row['email']) ? strtolower($row['email']) : null;
 
@@ -101,25 +106,26 @@ class ClientsImporter extends BaseImporter
                 $this->seenCodes[$code] = true;
             };
         }
-        if ($existing instanceof Client && filled($existing->tax_id) && filled($row['tax_id'] ?? null) && $existing->tax_id !== $row['tax_id']) {
-            $taxIdRules[] = fn (string $attribute, mixed $value, \Closure $fail) => $fail('El RNC/cédula no coincide con el cliente existente de este código.');
-        }
 
         return [
             'code' => $codeRules,
             'business_name' => ['required', 'string', 'max:200'],
             'trade_name' => ['nullable', 'string', 'max:200'],
-            'tax_id_type' => ['required', Rule::enum(TaxIdType::class)],
+            'tax_id_type' => ['required', Rule::enum(TaxIdType::class), function (string $attribute, mixed $value, \Closure $fail) use ($row): void {
+                if (($row['taxpayer_type'] ?? null) === 'juridica' && $value !== 'rnc') {
+                    $fail('Una persona jurídica debe identificarse con RNC.');
+                }
+            }],
             'tax_id' => $taxIdRules,
             'taxpayer_type' => ['required', Rule::enum(TaxpayerType::class)],
             'address' => ['nullable', 'string', 'max:255'],
             'city' => ['nullable', 'string', 'max:100'],
             'phone' => ['nullable', 'string', 'max:30'],
             'email' => ['nullable', 'email', 'max:255'],
-            'salesperson_code' => ['nullable', 'string', 'exists:salespeople,code'],
+            'salesperson_code' => ['nullable', 'string', Rule::exists('salespeople', 'code')->where('is_active', true)],
             'credit_days' => ['nullable', 'integer', 'between:0,365'],
             'credit_limit' => ['nullable', 'numeric', 'min:0', 'max:999999999999.99'],
-            'price_list_name' => ['nullable', 'string', 'exists:price_lists,name'],
+            'price_list_name' => ['nullable', 'string', Rule::exists('price_lists', 'name')->where('is_active', true)],
             'currency_code' => ['required', 'string', 'exists:currencies,code'],
         ];
     }
@@ -127,7 +133,11 @@ class ClientsImporter extends BaseImporter
     /** @return array<string, string> */
     public function messages(): array
     {
-        return ['code.unique' => 'El código ya pertenece a otro cliente.'];
+        return [
+            'code.unique' => 'El código ya pertenece a otro cliente.',
+            'salesperson_code.exists' => 'El vendedor no existe o está inactivo.',
+            'price_list_name.exists' => 'La lista de precios no existe o está inactiva.',
+        ];
     }
 
     /**

@@ -55,7 +55,12 @@ class SuppliersImporter extends BaseImporter
     public function normalize(array $row, array $meta): array
     {
         $row['country_code'] = isset($row['country_code']) ? strtoupper($row['country_code']) : null;
-        $row['tax_id'] = FiscalId::normalize((string) ($row['tax_id'] ?? '')) ?: null;
+        $rawTaxId = $row['tax_id'] ?? null;
+        $digits = $rawTaxId === null ? '' : FiscalId::normalize((string) $rawTaxId);
+        if ($digits !== '' && is_numeric($rawTaxId) && strlen($digits) < 11 && strlen($digits) !== 9) {
+            $digits = str_pad($digits, strlen($digits) < 9 ? 9 : 11, '0', STR_PAD_LEFT);
+        }
+        $row['tax_id'] = $digits === '' ? null : $digits;
         $row['currency_code'] = isset($row['currency_code']) ? strtoupper($row['currency_code']) : null;
         $row['email'] = isset($row['email']) ? strtolower($row['email']) : null;
 
@@ -87,9 +92,6 @@ class SuppliersImporter extends BaseImporter
                 }
                 $this->seenCodes[$code] = true;
             };
-        }
-        if ($existing instanceof Supplier && filled($existing->tax_id) && filled($row['tax_id'] ?? null) && $existing->tax_id !== $row['tax_id']) {
-            $taxIdRules[] = fn (string $attribute, mixed $value, \Closure $fail) => $fail('El RNC/cédula no coincide con el proveedor existente de este código.');
         }
 
         return [

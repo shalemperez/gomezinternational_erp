@@ -38,3 +38,13 @@ test('an import never changes an existing supplier code country or foreign tax i
     $s->refresh();
     expect($s->name)->toBe('Nuevo Nombre')->and($s->code)->toBe('PRV-90001')->and($s->country_code)->toBe('US')->and($s->foreign_tax_id)->toBe('US-11');
 });
+
+test('numeric local tax ids are padded to 9 or 11 digits', function () {
+    actingAsRole('accounting');
+    $file = makeSpreadsheet([['Nombre', 'País', 'RNC', 'Moneda'], ['Con RNC', 'DO', 10000002, 'DOP'], ['Con cédula', 'DO', 1000000008, 'DOP']]);
+    $this->post(route('admin.imports.preview', 'suppliers'), ['file' => $file])->assertRedirect();
+    $batch = ImportBatch::latest('id')->firstOrFail();
+    expect($batch->rows()->where('row_number', 2)->first()->data['tax_id'])->toBe('010000002')
+        ->and($batch->rows()->where('row_number', 3)->first()->data['tax_id'])->toBe('01000000008')
+        ->and($batch->valid_rows)->toBe(2);
+});
