@@ -2,7 +2,10 @@
 
 namespace App\Models;
 
+use App\Enums\InvoiceStatus;
 use App\Models\Concerns\LogsModelActivity;
+use App\Support\Money\Decimal;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -53,5 +56,16 @@ class ProformaLine extends Model
     public function product(): BelongsTo
     {
         return $this->belongsTo(Product::class);
+    }
+
+    /** Quantity still available to invoice: not yet invoiced and not held by another draft invoice. */
+    public function pendingQuantity(?int $excludingInvoiceId = null): string
+    {
+        $inDrafts = InvoiceLine::query()->where('proforma_line_id', $this->id)
+            ->whereHas('invoice', fn (Builder $query) => $query->where('status', InvoiceStatus::Draft)
+                ->when($excludingInvoiceId !== null, fn (Builder $q) => $q->whereKeyNot($excludingInvoiceId)))
+            ->pluck('quantity');
+
+        return Decimal::qty(Decimal::of($this->quantity)->minus(Decimal::of($this->invoiced_quantity))->minus(Decimal::of(Decimal::sum($inDrafts, 4))));
     }
 }

@@ -3,9 +3,11 @@
 namespace App\Actions\Sales;
 
 use App\Enums\InvoiceStatus;
+use App\Enums\ProformaStatus;
 use App\Exceptions\DocumentStateException;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\Proforma;
 use App\Models\User;
 use App\Services\Accounting\AccountingEventRecorder;
 use App\Services\Inventory\InventoryService;
@@ -31,6 +33,7 @@ class CancelInvoice
                 }
             }
 
+            $this->releaseProformaLines($invoice, $actor);
             $invoice->forceFill([
                 'status' => InvoiceStatus::Cancelled,
                 'cancelled_at' => now(),
@@ -51,5 +54,24 @@ class CancelInvoice
 
             return $invoice;
         });
+    }
+
+    /** Returns the proforma quantities consumed by this invoice and reopens the proforma when it was fully invoiced. */
+    private function releaseProformaLines(Invoice $invoice, User $actor): void
+    {
+        if ($invoice->proforma_id === null) {
+            return;
+        }
+        $proforma = Proforma::query()->whereKey($invoice->proforma_id)->lockForUpdate()->with('lines')->firstOrFail();
+        foreach ($invoice->lines->whereNotNull('proforma_line_id') as $line) {
+            $proformaLine = $proforma->lines->firstWhere('id', $line->proforma_line_id);
+            $proformaLine?->forceFill(['invoiced_quantity' => Decimal::qty(Decimal::of($proformaLine->invoiced_quantity)->minus(Decimal::of($line->quantity)))])->save();
+        }
+        if ($proforma->status === ProformaStatus::Invoiced) {
+            $proforma->forceFill(['status' => ProformaStatus::Approved, 'invoiced_at' => null])->save();
+            activity('proformas')->causedBy($actor)->performedOn($proforma)->event('reopened')
+                ->withProperties(['invoice_id' => $invoice->id])
+                ->log("Proforma {$proforma->number} reabierta por anulación de la factura {$invoice->number}");
+        }
     }
 }

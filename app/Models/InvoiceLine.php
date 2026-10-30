@@ -11,6 +11,7 @@ use Illuminate\Database\Eloquent\Relations\MorphMany;
 /**
  * @property int $id
  * @property int $invoice_id
+ * @property int|null $proforma_line_id
  * @property int $line_number
  * @property int $product_id
  * @property string $description
@@ -35,7 +36,7 @@ class InvoiceLine extends Model
     use LogsModelActivity;
 
     protected $fillable = [
-        'invoice_id', 'line_number', 'product_id', 'description', 'quantity', 'unit_price', 'discount_percent', 'line_subtotal', 'discount_amount',
+        'invoice_id', 'proforma_line_id', 'line_number', 'product_id', 'description', 'quantity', 'unit_price', 'discount_percent', 'line_subtotal', 'discount_amount',
         'taxable_base', 'itbis_rate', 'itbis_amount', 'additional_taxes', 'additional_tax_total', 'line_total', 'dispatched_quantity',
         'returned_quantity', 'credited_quantity', 'dispatched_cost',
     ];
@@ -55,6 +56,12 @@ class InvoiceLine extends Model
     public function invoice(): BelongsTo
     {
         return $this->belongsTo(Invoice::class);
+    }
+
+    /** @return BelongsTo<ProformaLine, $this> */
+    public function proformaLine(): BelongsTo
+    {
+        return $this->belongsTo(ProformaLine::class);
     }
 
     /** @return BelongsTo<Product, $this> */

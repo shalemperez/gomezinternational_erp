@@ -40,7 +40,7 @@ class InvoiceFromProformaRequest extends FormRequest
 
                     return;
                 }
-                $remaining = Decimal::qty(Decimal::of($line->quantity)->minus(Decimal::of($line->invoiced_quantity)));
+                $remaining = $line->pendingQuantity();
                 if (Decimal::cmp((string) $quantity, $remaining) > 0) {
                     $validator->errors()->add("quantities.{$lineId}", "Cantidad pendiente: {$remaining}.");
                 }

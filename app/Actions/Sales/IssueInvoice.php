@@ -6,10 +6,13 @@ use App\Enums\DocumentKind;
 use App\Enums\InvoiceStatus;
 use App\Enums\NcfType;
 use App\Enums\PaymentTerms;
+use App\Enums\ProformaStatus;
 use App\Exceptions\DocumentStateException;
 use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\Proforma;
+use App\Models\ProformaLine;
 use App\Models\User;
 use App\Services\Accounting\AccountingEventRecorder;
 use App\Services\Documents\DocumentLines;
@@ -62,7 +65,7 @@ class IssueInvoice
             Client::query()->whereKey($invoice->client_id)->lockForUpdate()->first(); // serialize concurrent issues for the same client
             $this->guardCreditLimit($invoice, $totals['total_base'], $actor, $creditOverride, $creditOverrideReason);
 
-            DocumentLines::write($invoice, $computed);
+            DocumentLines::write($invoice, $computed, array_map(fn (InvoiceLine $line) => ['proforma_line_id' => $line->proforma_line_id], array_values($invoice->lines->all())));
             foreach ($invoice->lines()->get() as $line) {
                 $this->inventory->reserve($line, $line->product_id, (int) $invoice->warehouse_id, $line->quantity);
             }
@@ -88,6 +91,7 @@ class IssueInvoice
                 'balance' => $totals['total'],
                 'issued_at' => now(),
             ])->save();
+            $this->invoiceProformaLines($invoice, $actor);
 
             activity('invoices')->causedBy($actor)->performedOn($invoice)->event('issued')
                 ->withProperties(['number' => $invoice->number, 'ncf' => $invoice->ncf, 'total' => $invoice->total])
@@ -105,6 +109,25 @@ class IssueInvoice
 
             return $invoice->fresh();
         });
+    }
+
+    /** Consumes the proforma quantities now that the invoice is fiscal and marks the proforma invoiced when complete. */
+    private function invoiceProformaLines(Invoice $invoice, User $actor): void
+    {
+        if ($invoice->proforma_id === null) {
+            return;
+        }
+        $proforma = Proforma::query()->whereKey($invoice->proforma_id)->lockForUpdate()->with('lines')->firstOrFail();
+        foreach ($invoice->lines()->whereNotNull('proforma_line_id')->get() as $line) {
+            $proformaLine = $proforma->lines->firstWhere('id', $line->proforma_line_id);
+            $proformaLine?->forceFill(['invoiced_quantity' => Decimal::qty(Decimal::of($proformaLine->invoiced_quantity)->plus(Decimal::of($line->quantity)))])->save();
+        }
+        if ($proforma->lines->every(fn (ProformaLine $line) => Decimal::cmp($line->invoiced_quantity, $line->quantity) >= 0)) {
+            $proforma->forceFill(['status' => ProformaStatus::Invoiced, 'invoiced_at' => now()])->save();
+            activity('proformas')->causedBy($actor)->performedOn($proforma)->event('invoiced')
+                ->withProperties(['invoice_id' => $invoice->id])
+                ->log("Proforma {$proforma->number} facturada");
+        }
     }
 
     private function guardConsumoThreshold(NcfType $type, string $totalBase, Client $client): void
