@@ -96,3 +96,13 @@ test('deactivating an inactive certificate writes no activity row', function () 
     $store->deactivate($cert->fresh(), $actor);
     expect(Activity::inLog('ecf_certificates')->where('event', 'deactivated')->where('subject_id', $cert->id)->count())->toBe(1);
 });
+
+test('an expired active certificate is refused for signing but still reported as current', function () {
+    $certificate = activeCertificate();
+    $certificate->forceFill(['valid_to' => now()->subDay()])->save();
+    $store = app(CertificateStore::class);
+    $expected = 'El certificado digital venció el '.$certificate->fresh()->valid_to->setTimezone('America/Santo_Domingo')->format('d/m/Y').'.';
+    expect(fn () => $store->active())->toThrow(EcfCertificateException::class, $expected)
+        ->and(fn () => $store->requireActive())->toThrow(EcfCertificateException::class, $expected)
+        ->and($store->current()->is($certificate))->toBeTrue();
+});

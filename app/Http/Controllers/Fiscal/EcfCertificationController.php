@@ -93,7 +93,7 @@ class EcfCertificationController extends Controller
     /** @return list<array{key: string, label: string, ok: bool, hint: string}> */
     private function readiness(Settings $settings, CertificateStore $certificateStore, string $environment, string $provider, string $receiverBaseUrl): array
     {
-        $certificate = $certificateStore->active();
+        $certificate = $certificateStore->current();
         $hasCompany = filled($settings->get('company.rnc')) && filled($settings->get('company.address'));
         $hasSequences = collect(['E31', 'E32', 'E33', 'E34'])->every(fn (string $type) => NcfSequence::query()
             ->where('ncf_type', $type)->where('environment', $environment)->where('is_active', true)->exists());

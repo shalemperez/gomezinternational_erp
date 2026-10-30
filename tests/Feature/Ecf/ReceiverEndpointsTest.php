@@ -87,3 +87,9 @@ test('an incoming commercial approval updates our e-cf document and an unknown o
         ->and(Activity::inLog('ecf_documents')->where('subject_id', $doc->id)->where('event', 'commercial_approval_received')->exists())->toBeTrue();
     $this->post('/fe/aprobacioncomercial/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', str_replace($doc->encf, 'E310000009999', $acecf))])->assertStatus(400);
 });
+
+test('the receiver answers 503 while the active certificate is expired', function () {
+    EcfCertificate::query()->update(['valid_to' => now()->subDay()]);
+    $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', supplierEcfXml())])->assertStatus(503);
+    expect(ReceivedEcf::count())->toBe(0);
+});

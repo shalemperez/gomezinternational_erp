@@ -55,7 +55,7 @@ class UpdateEcfSettingsRequest extends FormRequest
             }
 
             if ($provider === 'dgii') {
-                $certificate = app(CertificateStore::class)->active();
+                $certificate = app(CertificateStore::class)->current();
                 if ($certificate === null || $certificate->isExpired()) {
                     $v->errors()->add('fiscal.mode', 'Para activar el modo e-CF con DGII directo carga un certificado digital vigente.');
                 }

@@ -63,9 +63,20 @@ class CertificateStore
         });
     }
 
-    public function active(): ?EcfCertificate
+    public function current(): ?EcfCertificate
     {
         return EcfCertificate::query()->where('is_active', true)->latest('id')->first();
+    }
+
+    /** @throws EcfCertificateException when the active certificate is expired */
+    public function active(): ?EcfCertificate
+    {
+        $certificate = $this->current();
+        if ($certificate !== null && $certificate->isExpired()) {
+            throw new EcfCertificateException('El certificado digital venció el '.$certificate->valid_to->copy()->setTimezone('America/Santo_Domingo')->format('d/m/Y').'.');
+        }
+
+        return $certificate;
     }
 
     /** @throws EcfCertificateException */

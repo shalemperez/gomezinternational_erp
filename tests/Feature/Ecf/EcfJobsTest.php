@@ -6,6 +6,7 @@ use App\Jobs\CheckEcfAlerts;
 use App\Jobs\PollEcfStatus;
 use App\Jobs\RetryPendingEcfDocuments;
 use App\Jobs\SubmitEcfDocument;
+use App\Models\EcfCertificate;
 use App\Models\EcfDocument;
 use App\Models\NcfSequence;
 use App\Notifications\EcfAlert;
@@ -133,4 +134,20 @@ test('retries are exhausted after the maximum attempts', function () {
     (new SubmitEcfDocument($doc))->handle(app(EcfService::class));
     expect($doc->fresh()->next_attempt_at)->toBeNull()
         ->and(Activity::inLog('ecf_documents')->where('subject_id', $doc->id)->where('event', 'retries_exhausted')->exists())->toBeTrue();
+});
+
+test('the daily alert warns when the active certificate expires within thirty days', function () {
+    Notification::fake();
+    $owner = actingAsRole('owner');
+    EcfCertificate::query()->update(['valid_to' => now()->addDays(40)]);
+    (new CheckEcfAlerts)->handle(app(EcfService::class));
+    Notification::assertNothingSent();
+    EcfCertificate::query()->update(['valid_to' => now()->addDays(10)]);
+    (new CheckEcfAlerts)->handle(app(EcfService::class));
+    Notification::assertSentTo($owner, EcfAlert::class, fn (EcfAlert $n) => $n->certificate['days_left'] === 10 && $n->certificate['expired'] === false
+        && $n->certificate['expires_on'] === now()->addDays(10)->format('d/m/Y') && $n->pending === []);
+    $mail = (new EcfAlert([], [], ['name' => 'Cert', 'expires_on' => '10/11/2026', 'days_left' => 10, 'expired' => false]))->toMail($owner);
+    $expiredMail = (new EcfAlert([], [], ['name' => 'Cert', 'expires_on' => '01/10/2026', 'days_left' => -29, 'expired' => true]))->toMail($owner);
+    expect($mail->introLines)->toContain('El certificado digital Cert vence el 10/11/2026 (en 10 días); carga uno nuevo en Configuración → Facturación electrónica.')
+        ->and($expiredMail->introLines)->toContain('El certificado digital Cert venció el 01/10/2026; la emisión electrónica está detenida hasta que cargues uno vigente.');
 });

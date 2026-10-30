@@ -42,7 +42,9 @@ class ReceptionController extends Controller
 
     private function available(): bool
     {
-        return $this->settings->get('ecf.provider') === 'dgii' && $this->certificates->active() !== null;
+        $certificate = $this->certificates->current();
+
+        return $this->settings->get('ecf.provider') === 'dgii' && $certificate !== null && ! $certificate->isExpired();
     }
 
     private function payload(Request $request): string

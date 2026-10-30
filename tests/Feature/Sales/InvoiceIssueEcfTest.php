@@ -159,3 +159,16 @@ test('a cancel landing during the dgii call is refused because the attempt was c
         ->and($claimed->attempts)->toBe(1)->and($claimed->next_attempt_at->isFuture())->toBeTrue()->and($claimed->last_attempt_at)->not->toBeNull()
         ->and($doc->status)->toBe(EcfStatus::Sent)->and($invoice->fresh()->status)->toBe(InvoiceStatus::Issued);
 });
+
+test('issuing in ecf mode with an expired certificate is refused before any e-ncf is used', function () {
+    ecfMode();
+    activeCertificate()->forceFill(['valid_to' => now()->subDay()])->save();
+    $actor = User::factory()->create();
+    $draft = app(SaveInvoice::class)->handle(validInvoicePayload(['salesperson_id' => Salesperson::factory()->create()->id]), $actor->givePermissionTo('sales.invoices.view-all'));
+    foreach ($draft->lines as $line) {
+        app(InventoryService::class)->receive(new StockLine($line->product_id, (int) $draft->warehouse_id, '100', '50'), StockMovementType::Initial, $actor, $actor);
+    }
+    $next = NcfSequence::query()->where('ncf_type', 'E31')->value('next_number');
+    expect(fn () => app(IssueInvoice::class)->handle($draft, $actor))->toThrow(EcfCertificateException::class, 'El certificado digital venció el');
+    expect($draft->fresh()->status)->toBe(InvoiceStatus::Draft)->and(NcfSequence::query()->where('ncf_type', 'E31')->value('next_number'))->toBe($next)->and(EcfDocument::count())->toBe(0);
+});

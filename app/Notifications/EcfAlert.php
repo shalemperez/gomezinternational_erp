@@ -15,8 +15,9 @@ class EcfAlert extends Notification implements ShouldQueue
     /**
      * @param  list<array{encf: string, number: string, created_at: string, urgent: bool}>  $pending
      * @param  list<array{encf: string, number: string, message: string}>  $rejected
+     * @param  array{name: string, expires_on: string, days_left: int, expired: bool}|null  $certificate
      */
-    public function __construct(public readonly array $pending, public readonly array $rejected)
+    public function __construct(public readonly array $pending, public readonly array $rejected, public readonly ?array $certificate = null)
     {
         $this->afterCommit();
     }
@@ -38,6 +39,12 @@ class EcfAlert extends Notification implements ShouldQueue
         foreach ($this->rejected as $item) {
             $message->line("{$item['encf']} ({$item['number']}) rechazado: {$item['message']}");
         }
+        if ($this->certificate !== null) {
+            ['name' => $name, 'expires_on' => $expiresOn, 'days_left' => $daysLeft, 'expired' => $expired] = $this->certificate;
+            $message->line($expired
+                ? "El certificado digital {$name} venció el {$expiresOn}; la emisión electrónica está detenida hasta que cargues uno vigente."
+                : "El certificado digital {$name} vence el {$expiresOn} (en {$daysLeft} días); carga uno nuevo en Configuración → Facturación electrónica.");
+        }
 
         return $message;
     }
@@ -45,6 +52,6 @@ class EcfAlert extends Notification implements ShouldQueue
     /** @return array<string, mixed> */
     public function toArray(object $notifiable): array
     {
-        return ['pending' => $this->pending, 'rejected' => $this->rejected];
+        return ['pending' => $this->pending, 'rejected' => $this->rejected, 'certificate' => $this->certificate];
     }
 }
