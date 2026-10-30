@@ -91,7 +91,7 @@ class InvoiceController extends Controller
                 'creditOverride' => $user->can('sales.invoices.credit-override'),
                 'dispatch' => $user->can('inventory.dispatches.create') && $invoice->isOpen(),
                 'creditNote' => $user->can('sales.credit-notes.create') && ($invoice->isOpen() || $invoice->status === InvoiceStatus::Paid),
-                'debitNote' => $user->can('sales.debit-notes.create') && $invoice->isOpen(),
+                'debitNote' => $user->can('sales.debit-notes.create') && ($invoice->isOpen() || $invoice->status === InvoiceStatus::Paid),
                 'receipt' => $user->can('sales.receipts.create') && $invoice->isOpen(),
             ],
         ]);

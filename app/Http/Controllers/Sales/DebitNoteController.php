@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Sales;
 
 use App\Actions\Sales\IssueDebitNote;
 use App\Enums\DebitNoteReason;
+use App\Enums\InvoiceStatus;
 use App\Exports\TableExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sales\StoreDebitNoteRequest;
@@ -49,9 +50,10 @@ class DebitNoteController extends Controller
             return redirect()->route('sales.invoices.index')->with('error', 'Selecciona la factura a la que aplica la nota');
         }
         Gate::authorize('view', $invoice);
+        $isDebitable = in_array($invoice->status, [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid, InvoiceStatus::Paid], true);
 
         return Inertia::render('sales/debit-notes/form', [
-            'invoice' => [...$invoice->toArray(), 'status_label' => $invoice->status->label()],
+            'invoice' => $isDebitable ? [...$invoice->toArray(), 'status_label' => $invoice->status->label()] : null,
             'reasons' => $this->reasonOptions(),
             'today' => now()->toDateString(),
         ]);

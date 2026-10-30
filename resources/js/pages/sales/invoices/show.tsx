@@ -27,6 +27,7 @@ import {
     formatNumber,
 } from '@/lib/format';
 import { create as createCreditNote } from '@/routes/sales/credit-notes';
+import { create as createDebitNote } from '@/routes/sales/debit-notes';
 import {
     cancel,
     destroy,
@@ -56,6 +57,7 @@ type Props = {
         send: boolean;
         creditOverride: boolean;
         creditNote: boolean;
+        debitNote: boolean;
     };
 };
 
@@ -180,6 +182,17 @@ export default function InvoiceShow({
                         })}
                     >
                         Nota de crédito
+                    </Link>
+                </Button>
+            )}
+            {abilities.debitNote && (
+                <Button variant="outline" asChild>
+                    <Link
+                        href={createDebitNote.url({
+                            query: { invoice: invoice.id },
+                        })}
+                    >
+                        Nota de débito
                     </Link>
                 </Button>
             )}

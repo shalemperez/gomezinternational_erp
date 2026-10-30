@@ -58,3 +58,10 @@ test('index, show, pdf and export work and are scoped', function () {
     salesUserWithSalesperson();
     $this->get(route('sales.debit-notes.show', $n))->assertForbidden();
 });
+
+test('paid invoices offer the debit note action', function () {
+    actingAsRole('owner');
+    $i = issuedInvoice();
+    $i->forceFill(['status' => 'paid', 'paid_amount' => $i->total, 'balance' => '0.00'])->save();
+    $this->get(route('sales.invoices.show', $i))->assertOk()->assertInertia(fn ($p) => $p->where('can.debitNote', true)->where('can.creditNote', true));
+});
