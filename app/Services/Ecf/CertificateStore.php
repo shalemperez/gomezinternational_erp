@@ -20,6 +20,9 @@ class CertificateStore
         if (! openssl_pkcs12_read($p12Binary, $bundle, $password)) {
             throw new EcfCertificateException(self::UNREADABLE_MESSAGE);
         }
+        if (empty($bundle['pkey'])) {
+            throw new EcfCertificateException('El archivo .p12 no contiene la llave privada.');
+        }
 
         $parsed = $this->parseCertificate($bundle['cert']);
         $validTo = Carbon::createFromTimestampUTC($parsed['validTo_time_t']);
@@ -30,13 +33,18 @@ class CertificateStore
         $subject = $this->distinguishedName($parsed['subject']);
 
         return DB::transaction(function () use ($p12Binary, $password, $actor, $name, $parsed, $bundle, $subject, $validTo): EcfCertificate {
+            $fingerprint = openssl_x509_fingerprint($bundle['cert'], 'sha256');
+            if (EcfCertificate::query()->where('fingerprint_sha256', $fingerprint)->exists()) {
+                throw new EcfCertificateException('Este certificado ya fue cargado.');
+            }
+
             $certificate = EcfCertificate::query()->create([
                 'name' => $name ?? Str::limit($subject, 100, ''),
                 'subject' => $subject,
                 'issuer' => $this->distinguishedName($parsed['issuer']),
                 'serial_number' => $parsed['serialNumberHex'] ?? $parsed['serialNumber'],
-                'rnc' => preg_replace('/\D/', '', $parsed['subject']['serialNumber'] ?? '') ?: null,
-                'fingerprint_sha256' => openssl_x509_fingerprint($bundle['cert'], 'sha256'),
+                'rnc' => preg_replace('/\D/', '', $this->attributeValue($parsed['subject']['serialNumber'] ?? '')) ?: null,
+                'fingerprint_sha256' => $fingerprint,
                 'valid_from' => Carbon::createFromTimestampUTC($parsed['validFrom_time_t']),
                 'valid_to' => $validTo,
                 'p12_encrypted' => $p12Binary,
@@ -78,6 +86,10 @@ class CertificateStore
 
     public function deactivate(EcfCertificate $certificate, User $actor): void
     {
+        if (! $certificate->is_active) {
+            return;
+        }
+
         $certificate->update(['is_active' => false]);
 
         activity('ecf_certificates')->causedBy($actor)->performedOn($certificate)->event('deactivated')->log('Certificado desactivado');
@@ -115,9 +127,15 @@ class CertificateStore
         return $parsed;
     }
 
-    /** @param  array<string, string>  $parts */
+    /** @param  array<string, string|array<int|string, string>>  $parts */
     private function distinguishedName(array $parts): string
     {
-        return collect($parts)->map(fn (string $value, string $key) => "{$key}={$value}")->implode(', ');
+        return collect($parts)->map(fn (string|array $value, string $key) => "{$key}=".$this->attributeValue($value))->implode(', ');
+    }
+
+    /** A DN attribute repeated in the certificate comes back as a list; its values are joined. */
+    private function attributeValue(mixed $value): string
+    {
+        return is_array($value) ? implode(', ', $value) : (string) $value;
     }
 }

@@ -7,6 +7,7 @@ import {
     ClipboardList,
     Coins,
     FileBadge,
+    FileCheck,
     FileMinus,
     FilePlus,
     FileSpreadsheet,
@@ -238,6 +239,12 @@ export const navGroups: NavGroup[] = [
                 href: '/admin/ncf-sequences',
                 icon: Hash,
                 permission: 'fiscal.sequences.view',
+            },
+            {
+                title: 'Facturación electrónica',
+                href: '/admin/ecf-settings',
+                icon: FileCheck,
+                permission: 'fiscal.ecf.settings',
             },
             {
                 title: 'Plantillas de correo',

@@ -16,6 +16,19 @@ export type RoleWithPermissions = {
 };
 export type PermissionOption = { name: string; label: string; module: string };
 export type SettingsValues = Record<string, string | number | null>;
+export type EcfSettingsValues = Record<string, string | number | null>;
+export type EcfCertificateSummary = {
+    id: number;
+    name: string;
+    subject: string;
+    issuer: string;
+    serial_number: string;
+    rnc: string | null;
+    valid_from: string;
+    valid_to: string;
+    is_active: boolean;
+    is_expired: boolean;
+};
 export type ActivityRow = {
     id: number;
     created_at: string;
