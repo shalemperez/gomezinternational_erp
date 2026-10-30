@@ -32,6 +32,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useCan } from '@/lib/can';
 import { formatDateTime } from '@/lib/format';
 import { exportMethod, index } from '@/routes/admin/activity-log';
 import type { ActivityRow } from '@/types/admin';
@@ -58,6 +59,7 @@ export default function ActivityLogIndex({
     logNames,
     events,
 }: Props) {
+    const can = useCan();
     const [detail, setDetail] = useState<ActivityRow | null>(null);
 
     const changeFilter = (key: string, value: string | undefined) =>
@@ -120,14 +122,16 @@ export default function ActivityLogIndex({
                 <PageHeader
                     title="Bitácora de actividad"
                     actions={
-                        <ExportMenu
-                            xlsxUrl={exportMethod.url({
-                                query: { ...filters, format: 'xlsx' },
-                            })}
-                            csvUrl={exportMethod.url({
-                                query: { ...filters, format: 'csv' },
-                            })}
-                        />
+                        can('admin.activity-log.export') && (
+                            <ExportMenu
+                                xlsxUrl={exportMethod.url({
+                                    query: { ...filters, format: 'xlsx' },
+                                })}
+                                csvUrl={exportMethod.url({
+                                    query: { ...filters, format: 'csv' },
+                                })}
+                            />
+                        )
                     }
                 />
                 <DataTable

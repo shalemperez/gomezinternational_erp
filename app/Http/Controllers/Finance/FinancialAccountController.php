@@ -81,7 +81,7 @@ class FinancialAccountController extends Controller
         return redirect()->route('finance.accounts.index')->with('success', 'Cuenta eliminada');
     }
 
-    #[Middleware('permission:finance.accounts.view')]
+    #[Middleware('permission:finance.accounts.export')]
     public function export(Request $request): BinaryFileResponse
     {
         $query = TableQuery::applyFilters($this->filteredQuery($request), $request, ['name', 'bank_name', 'account_number'], ['name', 'type', 'is_active'], 'name', 'asc');

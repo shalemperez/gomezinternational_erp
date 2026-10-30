@@ -64,6 +64,7 @@ final class PermissionCatalog
         $add('admin.settings.view', 'Ver configuración', ['owner', 'accounting']);
         $add('admin.settings.manage', 'Editar configuración', ['owner']);
         $add('admin.activity-log.view', 'Ver bitácora', ['owner', 'accounting']);
+        $add('admin.activity-log.export', 'Exportar bitácora', ['owner']);
         $add('admin.system.manage', 'Administrar sistema (técnico)', []);
 
         // catalog
@@ -86,6 +87,7 @@ final class PermissionCatalog
         $add('finance.exchange-rates.manage', 'Registrar tasas de cambio', $all);
         $add('finance.accounts.view', 'Ver cuentas bancarias y cajas', $all);
         $add('finance.accounts.manage', 'Administrar cuentas bancarias y cajas', $all);
+        $add('finance.accounts.export', 'Exportar cuentas bancarias y cajas', array_values(array_intersect($all, self::EXPORTERS)));
 
         // inventory (phase 1 subset)
         $add('inventory.warehouses.view', 'Ver almacenes', [...$all, 'warehouse']);

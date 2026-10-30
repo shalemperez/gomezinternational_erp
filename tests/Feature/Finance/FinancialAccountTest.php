@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\FinancialAccount;
+use Spatie\Permission\Models\Role;
 
 crudResourceTests([
     'label' => 'financial accounts', 'routePrefix' => 'finance.accounts', 'component' => 'finance/accounts/index', 'model' => FinancialAccount::class, 'table' => 'financial_accounts', 'routeParam' => 'financialAccount',
@@ -25,4 +26,10 @@ test('switching an account to cash clears the bank fields', function () {
     $account = FinancialAccount::factory()->create(['type' => 'bank', 'bank_name' => 'Banco Popular', 'account_number' => '1']);
     $this->put(route('finance.accounts.update', $account), validFinancialAccountPayload(['type' => 'cash', 'name' => 'Caja', 'bank_name' => 'Banco Popular', 'account_number' => '1']))->assertRedirect(route('finance.accounts.index'));
     expect($account->fresh()->bank_name)->toBeNull()->and($account->fresh()->account_number)->toBeNull();
+});
+
+test('export requires the accounts export permission', function () {
+    actingAsRole('accounting');
+    Role::findByName('accounting')->revokePermissionTo('finance.accounts.export');
+    $this->get(route('finance.accounts.export', ['format' => 'csv']))->assertForbidden();
 });

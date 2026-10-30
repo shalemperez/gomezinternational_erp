@@ -85,7 +85,7 @@ export default function FinancialAccountIndex({ rows, filters }: Props) {
                     title="Cuentas bancarias y cajas"
                     actions={
                         <>
-                            {can('finance.accounts.view') && (
+                            {can('finance.accounts.export') && (
                                 <ExportMenu
                                     xlsxUrl={exportMethod.url({
                                         query: { ...filters, format: 'xlsx' },

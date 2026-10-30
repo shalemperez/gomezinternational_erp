@@ -25,8 +25,8 @@ class AdditionalTaxCalculator
                 Decimal::of($qty)
                     ->multipliedBy(Decimal::of($this->requireVolume($volumeLiters)))
                     ->multipliedBy(Decimal::of($this->requireDegree($alcoholDegree)))
-                    ->dividedBy(100, 10, RoundingMode::HalfUp)
                     ->multipliedBy(Decimal::of((string) $tax->amount))
+                    ->dividedBy(100, 10, RoundingMode::HalfUp)
             ),
         };
     }

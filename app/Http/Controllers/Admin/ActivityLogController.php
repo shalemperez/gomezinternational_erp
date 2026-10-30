@@ -33,7 +33,7 @@ class ActivityLogController extends Controller
         ]);
     }
 
-    #[Middleware('permission:admin.activity-log.view')]
+    #[Middleware('permission:admin.activity-log.export')]
     public function export(Request $request): BinaryFileResponse
     {
         $query = TableQuery::applyFilters($this->filtered($request), $request, [], ['created_at'], 'created_at', 'desc');

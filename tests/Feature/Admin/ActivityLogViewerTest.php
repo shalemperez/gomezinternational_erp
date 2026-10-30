@@ -69,3 +69,9 @@ test('subject type filter matches the class exactly and tolerates odd input', fu
     $this->get(route('admin.activity-log.index', ['subject_type' => 'Brand\\']))->assertOk();
     $this->get(route('admin.activity-log.index', ['search' => '100%_\\']))->assertOk();
 });
+
+test('accounting can view the activity log but cannot export it', function () {
+    actingAsRole('accounting');
+    $this->get(route('admin.activity-log.index'))->assertOk();
+    $this->get(route('admin.activity-log.export', ['format' => 'csv']))->assertForbidden();
+});

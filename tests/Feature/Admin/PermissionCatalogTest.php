@@ -24,7 +24,10 @@ test('seeder creates all roles and permissions idempotently', function () {
         ->and(Role::findByName('accounting')->hasPermissionTo('catalog.salespeople.create'))->toBeTrue()
         ->and(Role::findByName('owner')->hasPermissionTo('admin.system.manage'))->toBeFalse()
         ->and(Role::findByName('owner')->hasPermissionTo('catalog.tax-ids.override-validation'))->toBeTrue()
-        ->and(Role::findByName('accounting')->hasPermissionTo('catalog.tax-ids.override-validation'))->toBeFalse();
+        ->and(Role::findByName('accounting')->hasPermissionTo('catalog.tax-ids.override-validation'))->toBeFalse()
+        ->and(Role::findByName('accounting')->hasPermissionTo('finance.accounts.export'))->toBeTrue()
+        ->and(Role::findByName('accounting')->hasPermissionTo('admin.activity-log.export'))->toBeFalse()
+        ->and(Role::findByName('owner')->hasPermissionTo('admin.activity-log.export'))->toBeTrue();
 });
 
 test('management has no admin permissions', function () {
