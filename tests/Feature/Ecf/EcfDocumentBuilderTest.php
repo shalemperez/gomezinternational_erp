@@ -16,6 +16,7 @@ use App\Services\Ecf\XsdValidator;
 use App\Support\FiscalId;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DocumentSequenceSeeder;
+use Illuminate\Support\Facades\DB;
 
 beforeEach(function () {
     (new DocumentSequenceSeeder)->run();
@@ -157,4 +158,33 @@ test('missing company rnc or address is refused before any xml is produced', fun
     companyFiscalSettings(['company.address' => '']);
     expect(fn () => app(EcfDocumentBuilder::class)->fromInvoice($invoice, NcfType::E31, 'E310000000007', CarbonImmutable::parse('2027-12-31')))
         ->toThrow(EcfException::class, 'Configura la dirección de la empresa en Configuración antes de emitir e-CF.');
+});
+
+test('a credito fiscal invoice without the client tax id is refused', function () {
+    companyFiscalSettings();
+    $client = Client::factory()->create(['tax_id' => null, 'tax_id_type' => 'none', 'taxpayer_type' => 'consumidor_final']);
+    $invoice = issuedInvoice(['client_id' => $client->id]);
+    expect(fn () => app(EcfDocumentBuilder::class)->fromInvoice($invoice, NcfType::E31, 'E310000000008', CarbonImmutable::parse('2027-12-31')))
+        ->toThrow(EcfException::class, 'La factura de crédito fiscal requiere el RNC o cédula del cliente.');
+});
+
+test('an expiring e-cf type without sequence expiry is refused', function () {
+    companyFiscalSettings();
+    $invoice = issuedInvoice();
+    expect(fn () => app(EcfDocumentBuilder::class)->fromInvoice($invoice, NcfType::E31, 'E310000000009', null))
+        ->toThrow(EcfException::class, 'requiere fecha de vencimiento para el e-CF');
+});
+
+test('a credit note on an e-cf older than 30 days carries IndicadorNotaCredito 1', function () {
+    companyFiscalSettings();
+    $invoice = issuedInvoice();
+    $actor = User::factory()->create();
+    activeSequence('B04');
+    DB::table('invoices')->where('id', $invoice->id)->update(['issue_date' => today()->subDays(31)->toDateString()]);
+    $credit = app(IssueCreditNote::class)->handle(validCreditNotePayload($invoice->fresh(), ['reason' => 'discount']), $invoice->fresh(), $actor);
+
+    $doc = signedEcfXml(app(EcfDocumentBuilder::class)->fromCreditNote($credit->fresh(), NcfType::E34, 'E340000000002', null));
+    app(XsdValidator::class)->validate($doc, 'ecf-34');
+
+    expect((new DOMXPath($doc))->evaluate('string(//IdDoc/IndicadorNotaCredito)'))->toBe('1');
 });

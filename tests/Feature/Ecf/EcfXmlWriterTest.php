@@ -35,3 +35,19 @@ test('xsd validation reports the schema file and the libxml message', function (
     expect(fn () => app(XsdValidator::class)->validate($doc, 'ecf-31'))->toThrow(EcfValidationException::class, 'El XML no cumple el XSD e-CF 31 v.1.0.xsd:');
     expect(fn () => app(XsdValidator::class)->validate($doc, 'nope'))->toThrow(InvalidArgumentException::class);
 });
+
+test('a schema that cannot be compiled raises a validation exception and restores the libxml error setting', function () {
+    $directory = sys_get_temp_dir().DIRECTORY_SEPARATOR.'ecf-broken-xsd-'.uniqid();
+    mkdir($directory);
+    file_put_contents($directory.DIRECTORY_SEPARATOR.'e-CF 31 v.1.0.xsd', '<xs:schema xmlns:xs="http://www.w3.org/2001/XMLSchema"><xs:element name="ECF" type="Nope"/></xs:schema>');
+    config(['ecf.xsd_path' => $directory]);
+    $doc = new DOMDocument;
+    $doc->loadXML('<ECF/>');
+
+    libxml_use_internal_errors(false);
+    expect(fn () => app(XsdValidator::class)->validate($doc, 'ecf-31'))->toThrow(EcfValidationException::class);
+    expect(libxml_use_internal_errors(false))->toBeFalse();
+
+    unlink($directory.DIRECTORY_SEPARATOR.'e-CF 31 v.1.0.xsd');
+    rmdir($directory);
+});

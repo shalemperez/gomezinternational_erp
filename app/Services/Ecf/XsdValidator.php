@@ -26,11 +26,16 @@ class XsdValidator
 
         $file = self::FILES[$schema];
         $previous = libxml_use_internal_errors(true);
-        libxml_clear_errors();
-        $valid = $document->schemaValidate(config('ecf.xsd_path').DIRECTORY_SEPARATOR.$file);
-        $errors = libxml_get_errors();
-        libxml_clear_errors();
-        libxml_use_internal_errors($previous);
+        try {
+            libxml_clear_errors();
+            $valid = $document->schemaValidate(config('ecf.xsd_path').DIRECTORY_SEPARATOR.$file);
+            $errors = libxml_get_errors();
+        } catch (\Throwable $e) {
+            throw new EcfValidationException('El XSD '.$file.' no se pudo cargar: '.$e->getMessage(), 0, $e);
+        } finally {
+            libxml_clear_errors();
+            libxml_use_internal_errors($previous);
+        }
 
         if ($valid) {
             return;

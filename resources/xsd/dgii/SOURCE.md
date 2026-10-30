@@ -9,7 +9,7 @@
   - `RFCE 32`, `ARECF`, `ANECF`: 20/06/2023
   - `ACECF`: 21/12/2022
   - `Semilla`: 12/11/2020
-- Copias textuales, sin modificar. Ver `docs/superpowers/research/2026-10-30-dgii-ecf.md` (§2.5).
+- Copias de los XSD oficiales de la DGII; ver "Local corrections" para las correcciones mínimas aplicadas. Ver `docs/superpowers/research/2026-10-30-dgii-ecf.md` (§2.5).
 
 ## Local corrections
 
