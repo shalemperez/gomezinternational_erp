@@ -75,7 +75,7 @@ class CreditNoteController extends Controller
         $invoice = Invoice::query()->whereKey($request->integer('invoice_id'))->firstOrFail();
         $creditNote = $issueCreditNote->handle($request->validated(), $invoice, $this->actor($request));
 
-        return redirect()->route('sales.credit-notes.show', $creditNote)->with('success', "Nota de crédito {$creditNote->number} emitida con NCF {$creditNote->ncf}");
+        return redirect()->route('sales.credit-notes.show', $creditNote)->with('success', "Nota de crédito {$creditNote->number} emitida con ".($creditNote->fiscal_mode === 'ecf' ? 'e-NCF' : 'NCF')." {$creditNote->ncf}");
     }
 
     #[Middleware('permission:sales.credit-notes.view')]

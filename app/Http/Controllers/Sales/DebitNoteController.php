@@ -68,7 +68,7 @@ class DebitNoteController extends Controller
         $invoice = Invoice::query()->whereKey($request->integer('invoice_id'))->firstOrFail();
         $debitNote = $issueDebitNote->handle($request->validated(), $invoice, $this->actor($request));
 
-        return redirect()->route('sales.debit-notes.show', $debitNote)->with('success', "Nota de débito {$debitNote->number} emitida con NCF {$debitNote->ncf}");
+        return redirect()->route('sales.debit-notes.show', $debitNote)->with('success', "Nota de débito {$debitNote->number} emitida con ".($debitNote->fiscal_mode === 'ecf' ? 'e-NCF' : 'NCF')." {$debitNote->ncf}");
     }
 
     #[Middleware('permission:sales.debit-notes.view')]

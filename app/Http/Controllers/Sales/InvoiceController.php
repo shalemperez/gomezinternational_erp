@@ -162,7 +162,7 @@ class InvoiceController extends Controller
 
         $issued = $issueInvoice->handle($invoice, $user, $creditOverride, $request->string('credit_override_reason')->trim()->toString() ?: null);
 
-        return redirect()->route('sales.invoices.show', $issued)->with('success', "Factura {$issued->number} emitida con NCF {$issued->ncf}");
+        return redirect()->route('sales.invoices.show', $issued)->with('success', "Factura {$issued->number} emitida con ".($issued->fiscal_mode === 'ecf' ? 'e-NCF' : 'NCF')." {$issued->ncf}");
     }
 
     #[Middleware('permission:sales.invoices.cancel')]

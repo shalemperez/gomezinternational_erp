@@ -2,9 +2,12 @@
 
 namespace App\Actions\Sales;
 
+use App\Enums\EcfStatus;
 use App\Enums\InvoiceStatus;
 use App\Enums\ProformaStatus;
 use App\Exceptions\DocumentStateException;
+use App\Models\EcfAnnulmentRange;
+use App\Models\EcfDocument;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Proforma;
@@ -26,6 +29,13 @@ class CancelInvoice
             if (! $invoice->isOpen() || ! Decimal::isZero($invoice->paid_amount) || ! Decimal::isZero($invoice->credited_amount) || ! Decimal::isZero($invoice->debited_amount) || $hasDispatches) {
                 throw new DocumentStateException('Solo se pueden anular facturas sin cobros, notas ni despachos; usa una nota de crédito.');
             }
+            $ecfDocument = null;
+            if ($invoice->fiscal_mode === 'ecf') {
+                $ecfDocument = EcfDocument::query()->where('document_type', Invoice::class)->where('document_id', $invoice->id)->lockForUpdate()->firstOrFail();
+                if (! $ecfDocument->canBeCancelledLocally()) {
+                    throw new DocumentStateException('Un e-CF ya enviado a la DGII no se puede anular; emite una nota de crédito que lo anule (código de modificación 1).');
+                }
+            }
 
             foreach ($invoice->lines as $line) {
                 foreach ($line->reservations()->whereNull('released_at')->get() as $reservation) {
@@ -34,6 +44,9 @@ class CancelInvoice
             }
 
             $this->releaseProformaLines($invoice, $actor);
+            if ($ecfDocument !== null) {
+                $this->cancelEcfDocument($ecfDocument, $actor);
+            }
             $invoice->forceFill([
                 'status' => InvoiceStatus::Cancelled,
                 'cancelled_at' => now(),
@@ -54,6 +67,25 @@ class CancelInvoice
 
             return $invoice;
         });
+    }
+
+    /** The e-NCF never reached the DGII, so its number is queued for annulment instead of being reused. */
+    private function cancelEcfDocument(EcfDocument $ecfDocument, User $actor): void
+    {
+        $ecfDocument->forceFill(['status' => EcfStatus::Cancelled, 'next_attempt_at' => null])->save();
+        $sequenceNumber = (int) substr($ecfDocument->encf, 3);
+        EcfAnnulmentRange::query()->create([
+            'ncf_type' => $ecfDocument->ncf_type->value,
+            'environment' => $ecfDocument->environment->value,
+            'range_from' => $sequenceNumber,
+            'range_to' => $sequenceNumber,
+            'quantity' => 1,
+            'reason' => 'Factura anulada antes del envío',
+            'ecf_document_id' => $ecfDocument->id,
+        ]);
+        activity('ecf_documents')->causedBy($actor)->performedOn($ecfDocument)->event('cancelled')
+            ->withProperties(['encf' => $ecfDocument->encf])
+            ->log('Documento anulado antes del envío');
     }
 
     /** Returns the proforma quantities consumed by this invoice and reopens the proforma when it was fully invoiced. */

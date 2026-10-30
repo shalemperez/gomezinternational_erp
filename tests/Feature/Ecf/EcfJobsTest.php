@@ -11,6 +11,7 @@ use App\Models\NcfSequence;
 use App\Notifications\EcfAlert;
 use App\Notifications\EcfRejected;
 use App\Services\Ecf\EcfService;
+use App\Services\Fiscal\FiscalNumberingService;
 use App\Services\Settings;
 use App\Support\Fiscal\FiscalNumber;
 use Carbon\CarbonImmutable;
@@ -102,7 +103,7 @@ test('a rejection stores the dgii messages, marks the document rejected, never r
     Notification::assertSentTo($accounting, EcfRejected::class);
     Notification::assertNotSentTo($sales, EcfRejected::class);
     app(Settings::class)->set('fiscal.mode', 'ecf');
-    expect($sequence->fresh()->next_number)->toBe($next);
+    expect(app(FiscalNumberingService::class)->assign(NcfType::B01, today())->ncf)->toBe('E31'.str_pad((string) $next, 10, '0', STR_PAD_LEFT));
 });
 
 test('the schedule registers the e-cf sweep every five minutes and the alerts daily', function () {
