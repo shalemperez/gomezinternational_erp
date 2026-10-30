@@ -18,6 +18,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Middleware;
 use Illuminate\Support\Facades\Crypt;
+use Illuminate\Support\Str;
 use Inertia\Inertia;
 use Inertia\Response;
 
@@ -40,6 +41,10 @@ class EcfSettingsController extends Controller
             'receiverUrls' => [
                 'reception' => "{$receiverBaseUrl}/fe/recepcion/api/ecf",
                 'approval' => "{$receiverBaseUrl}/fe/aprobacioncomercial/api/ecf",
+            ],
+            'alanubeWebhook' => [
+                'url' => "{$receiverBaseUrl}/fe/alanube/webhook",
+                'key' => $settings->get('ecf.alanube.webhook_key'),
             ],
             'fiscalModeEffective' => app(FiscalNumberingService::class)->mode(),
         ]);
@@ -64,6 +69,10 @@ class EcfSettingsController extends Controller
         $apiKey = data_get($validated, 'ecf.alanube.api_key');
         if (filled($apiKey)) {
             $flat['ecf.alanube.api_key'] = Crypt::encryptString($apiKey);
+        }
+        // The webhook key is generated once, when Alanube becomes the provider, and then shown on the settings page.
+        if (data_get($validated, 'ecf.provider') === 'alanube' && blank($settings->get('ecf.alanube.webhook_key'))) {
+            $flat['ecf.alanube.webhook_key'] = Str::random(40);
         }
 
         foreach ($flat as $key => $value) {

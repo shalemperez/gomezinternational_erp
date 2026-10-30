@@ -3,6 +3,8 @@
 namespace App\Models;
 
 use Carbon\CarbonInterface;
+use Database\Factories\EcfAnnulmentFactory;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -15,6 +17,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 class EcfAnnulment extends Model
 {
+    /** @use HasFactory<EcfAnnulmentFactory> */
+    use HasFactory;
+
     protected $fillable = ['environment', 'status', 'ranges_count', 'quantity', 'xml_path', 'response', 'sent_at', 'created_by'];
 
     protected function casts(): array

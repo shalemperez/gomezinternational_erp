@@ -31,5 +31,6 @@ return [
     'unit_codes' => ['UND' => 43, 'CAJ' => 6, 'BOT' => 5, 'LT' => 24, 'L' => 24, 'KG' => 21, 'DOC' => 13, 'PAQ' => 31, 'PZA' => 34, 'GR' => 17, 'LB' => 23, 'GL' => 15, 'ML' => 59, 'default' => 43],
     'alanube' => [
         'base_urls' => ['sandbox' => env('ALANUBE_SANDBOX_URL', 'https://sandbox.alanube.co/dom/v1'), 'production' => env('ALANUBE_PRODUCTION_URL', 'https://api.alanube.co/dom/v1')],
+        'paths' => ['E31' => 'fiscal-invoices', 'E32' => 'invoices', 'E33' => 'debit-notes', 'E34' => 'credit-notes', 'E44' => 'special-regimes', 'E45' => 'gubernamentals'],
     ],
 ];

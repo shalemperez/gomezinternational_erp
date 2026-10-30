@@ -12,6 +12,7 @@ use App\Models\EcfDocument;
 use App\Models\Invoice;
 use App\Models\User;
 use App\Notifications\EcfRejected;
+use App\Services\Ecf\Providers\AlanubeProvider;
 use App\Services\Ecf\Providers\DgiiDirectProvider;
 use App\Services\Ecf\Providers\FakeEcfProvider;
 use App\Services\Settings;
@@ -53,6 +54,7 @@ class EcfService
         return match ($name) {
             'fake' => app(FakeEcfProvider::class),
             'dgii' => app(DgiiDirectProvider::class),
+            'alanube' => app(AlanubeProvider::class),
             default => throw new EcfException("Proveedor e-CF no soportado: {$name}"),
         };
     }

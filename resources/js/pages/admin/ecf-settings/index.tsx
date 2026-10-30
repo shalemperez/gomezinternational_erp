@@ -28,6 +28,7 @@ type Props = {
     warnings: string[];
     documentCounts: Record<'test' | 'cert' | 'prod', number>;
     receiverUrls: { reception: string; approval: string };
+    alanubeWebhook: { url: string; key: string | null };
     fiscalModeEffective: string;
 };
 
@@ -38,6 +39,7 @@ export default function EcfSettingsIndex({
     warnings,
     documentCounts,
     receiverUrls,
+    alanubeWebhook,
     fiscalModeEffective,
 }: Props) {
     return (
@@ -309,6 +311,31 @@ export default function EcfSettingsIndex({
                                             )}
                                         </div>
                                     </FormField>
+
+                                    <div className="grid gap-4 border-t pt-4">
+                                        <p className="text-sm text-muted-foreground">
+                                            Registra esta URL en Alanube como
+                                            webhook del evento
+                                            documents.emissionFinished, con la
+                                            cabecera x-api-key igual a la clave.
+                                        </p>
+                                        <ReceiverUrl
+                                            label="URL Webhook Alanube"
+                                            value={alanubeWebhook.url}
+                                        />
+                                        {alanubeWebhook.key !== null ? (
+                                            <ReceiverUrl
+                                                label="Clave x-api-key"
+                                                value={alanubeWebhook.key}
+                                            />
+                                        ) : (
+                                            <p className="text-sm text-muted-foreground">
+                                                Guarda la configuración con el
+                                                proveedor Alanube para generar
+                                                la clave del webhook.
+                                            </p>
+                                        )}
+                                    </div>
                                 </TabsContent>
 
                                 <div className="flex gap-2">
