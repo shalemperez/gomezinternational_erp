@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Currency;
+use App\Models\NcfSequence;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Support\FiscalId;
@@ -118,4 +119,14 @@ function validFinancialAccountPayload(array $over = []): array
     $currency = Currency::query()->where('is_base', true)->firstOr(fn () => Currency::factory()->create(['code' => 'DOP', 'is_base' => true]));
 
     return array_merge(['type' => 'bank', 'name' => 'Cuenta operativa', 'bank_name' => 'Banco Popular', 'account_number' => '0123456789', 'currency_id' => $currency->id, 'is_active' => 'on'], $over);
+}
+
+function validNcfSequencePayload(array $over = []): array
+{
+    return array_merge(['ncf_type' => 'B01', 'range_from' => 1, 'range_to' => 100, 'expires_on' => now()->addYear()->endOfYear()->toDateString(), 'authorization_number' => '7001234567', 'notes' => '', 'is_active' => 'on'], $over);
+}
+
+function activeSequence(string $type = 'B01', array $over = []): NcfSequence
+{
+    return NcfSequence::factory()->create(array_merge(['ncf_type' => $type, 'range_from' => 1, 'range_to' => 100, 'next_number' => 1, 'expires_on' => in_array($type, ['B02', 'B04'], true) ? null : now()->addYear()->toDateString(), 'is_active' => true], $over));
 }

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\ActivityLogController;
 use App\Http\Controllers\Admin\ImpersonateController;
+use App\Http\Controllers\Admin\NcfSequenceController;
 use App\Http\Controllers\Admin\RoleController;
 use App\Http\Controllers\Admin\SettingsController;
 use App\Http\Controllers\Admin\UserController;
@@ -16,6 +17,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::put('roles/{role:name}', [RoleController::class, 'update'])->name('roles.update');
     Route::get('settings', [SettingsController::class, 'index'])->name('settings.index');
     Route::put('settings', [SettingsController::class, 'update'])->name('settings.update');
+    Route::resource('ncf-sequences', NcfSequenceController::class)->except(['show', 'destroy'])->parameters(['ncf-sequences' => 'ncfSequence']);
     Route::get('activity-log/export', [ActivityLogController::class, 'export'])->name('activity-log.export');
     Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log.index');
     Route::middleware('permission:catalog.clients.import|catalog.suppliers.import|catalog.products.import|catalog.price-lists.import')->group(function () {

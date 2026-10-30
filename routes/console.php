@@ -1,5 +1,6 @@
 <?php
 
+use App\Jobs\CheckNcfSequences;
 use App\Jobs\FetchDailyExchangeRates;
 use App\Services\Settings;
 use Illuminate\Foundation\Inspiring;
@@ -13,3 +14,5 @@ Artisan::command('inspire', function () {
 Schedule::job(new FetchDailyExchangeRates)
     ->dailyAt(config('erp.exchange_rates.fetch_time'))
     ->when(fn () => app(Settings::class)->get('exchange_rates.source', 'manual') !== 'manual');
+
+Schedule::job(new CheckNcfSequences)->dailyAt('07:30');

@@ -1,0 +1,23 @@
+export type NcfSequenceRow = {
+    id: number;
+    ncf_type: string;
+    label: string;
+    range_from: number;
+    range_to: number;
+    next_number: number;
+    remaining: number;
+    used: number;
+    expires_on: string | null;
+    authorization_number: string | null;
+    is_active: boolean;
+    exhausted_at: string | null;
+    notes: string | null;
+};
+
+export type SequenceAlert = {
+    ncf_type: string;
+    label: string;
+    remaining: number;
+    expires_on: string | null;
+    reason: 'low' | 'expiring' | 'expired' | 'missing';
+};
