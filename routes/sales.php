@@ -5,6 +5,7 @@ use App\Http\Controllers\Sales\DebitNoteController;
 use App\Http\Controllers\Sales\InvoiceController;
 use App\Http\Controllers\Sales\ProformaController;
 use App\Http\Controllers\Sales\ReceiptController;
+use App\Http\Controllers\Sales\StatementController;
 use App\Http\Controllers\Sales\TotalsPreviewController;
 use Illuminate\Support\Facades\Route;
 
@@ -32,6 +33,12 @@ Route::middleware(['auth'])->prefix('sales')->name('sales.')->group(function () 
     Route::post('receipts/{receipt}/cancel', [ReceiptController::class, 'cancel'])->name('receipts.cancel');
     Route::post('receipts/{receipt}/apply', [ReceiptController::class, 'apply'])->name('receipts.apply');
     Route::resource('receipts', ReceiptController::class)->only(['index', 'create', 'store', 'show']);
+
+    Route::get('statements', [StatementController::class, 'index'])->name('statements.index');
+    Route::get('statements/export', [StatementController::class, 'export'])->name('statements.export');
+    Route::get('statements/{client}', [StatementController::class, 'show'])->name('statements.show');
+    Route::get('statements/{client}/pdf', [StatementController::class, 'pdf'])->name('statements.pdf');
+    Route::post('statements/{client}/send', [StatementController::class, 'send'])->name('statements.send');
 
     Route::get('proformas/export', [ProformaController::class, 'export'])->name('proformas.export');
     Route::get('proformas/{proforma}/pdf', [ProformaController::class, 'pdf'])->name('proformas.pdf');

@@ -1,0 +1,178 @@
+<?php
+
+namespace App\Services\Sales;
+
+use App\Enums\InvoiceStatus;
+use App\Enums\ReceiptStatus;
+use App\Models\Client;
+use App\Models\CreditNote;
+use App\Models\DebitNote;
+use App\Models\Invoice;
+use App\Models\ReceiptApplication;
+use App\Models\User;
+use App\Support\Money\Decimal;
+use Carbon\CarbonInterface;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Collection;
+
+/**
+ * @phpstan-type Movement array{date: string, id: int, currency: string, type: string, type_label: string, number: ?string, ncf: ?string, description: string, debit: string, credit: string}
+ * @phpstan-type AgingItem array{invoice: Invoice, bucket: string, balance: string, base: string}
+ */
+class ClientStatementService
+{
+    /**
+     * Movements of one client per currency with a running balance inside the period.
+     *
+     * @return array<string, array{opening_balance: string, rows: list<array{date: string, type: string, type_label: string, number: ?string, ncf: ?string, description: string, debit: string, credit: string, balance: string}>, closing_balance: string}>
+     */
+    public function statement(Client $client, CarbonInterface $from, CarbonInterface $to): array
+    {
+        $movements = $this->movements($client)
+            ->filter(fn (array $movement) => $movement['date'] <= $to->toDateString())
+            ->sortBy([['date', 'asc'], ['id', 'asc']])
+            ->groupBy('currency');
+
+        $fromDate = $from->toDateString();
+        $statement = [];
+        foreach ($movements as $currency => $items) {
+            $opening = $this->net($items->filter(fn (array $movement) => $movement['date'] < $fromDate));
+            $balance = $opening;
+            $rows = [];
+            foreach ($items->filter(fn (array $movement) => $movement['date'] >= $fromDate)->values() as $movement) {
+                $balance = Decimal::money(Decimal::of($balance)->plus($movement['debit'])->minus($movement['credit']));
+                $rows[] = [
+                    'date' => $movement['date'], 'type' => $movement['type'], 'type_label' => $movement['type_label'],
+                    'number' => $movement['number'], 'ncf' => $movement['ncf'], 'description' => $movement['description'],
+                    'debit' => $movement['debit'], 'credit' => $movement['credit'], 'balance' => $balance,
+                ];
+            }
+            $statement[(string) $currency] = ['opening_balance' => $opening, 'rows' => $rows, 'closing_balance' => $balance];
+        }
+
+        return $statement;
+    }
+
+    /**
+     * Open balances of issued invoices bucketed by days overdue at $asOf, per client and currency.
+     *
+     * @return array{rows: list<array{client_id: int, client_code: string, client_name: string, salesperson: ?string, currency_code: string, current: string, d1_30: string, d31_60: string, d61_90: string, d90_plus: string, total: string, total_base: string}>, totals: array{current: string, d1_30: string, d61_90: string, d31_60: string, d90_plus: string, total: string, total_base: string}}
+     */
+    public function aging(User $viewer, CarbonInterface $asOf, ?int $salespersonId = null, ?string $search = null): array
+    {
+        $invoices = Invoice::query()
+            ->whereIn('status', [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid])
+            ->whereHas('client', fn (Builder $query) => $query->visibleTo($viewer)
+                ->when($salespersonId !== null, fn (Builder $q) => $q->where('salesperson_id', $salespersonId))
+                ->when($search !== null && $search !== '', fn (Builder $q) => $q->where(fn (Builder $s) => $s
+                    ->where('business_name', 'ilike', "%{$search}%")->orWhere('code', 'ilike', "%{$search}%"))))
+            ->with(['client.salesperson:id,name', 'currency:id,code'])
+            ->get()
+            ->map(function (Invoice $invoice) use ($asOf): array {
+                $days = (int) $invoice->due_date->diffInDays($asOf, false);
+
+                return [
+                    'invoice' => $invoice,
+                    'bucket' => match (true) {
+                        $days <= 0 => 'current',
+                        $days <= 30 => 'd1_30',
+                        $days <= 60 => 'd31_60',
+                        $days <= 90 => 'd61_90',
+                        default => 'd90_plus',
+                    },
+                    'balance' => $invoice->balance,
+                    'base' => Decimal::mul($invoice->balance, $invoice->exchange_rate, Decimal::MONEY),
+                ];
+            });
+
+        $rows = $invoices->groupBy(fn (array $item) => $item['invoice']->client_id.'|'.$item['invoice']->currency->code)
+            ->map(function (Collection $items): array {
+                /** @var Invoice $first */
+                $first = $items->first()['invoice'];
+
+                return [
+                    'client_id' => $first->client_id,
+                    'client_code' => $first->client->code,
+                    'client_name' => $first->client->business_name,
+                    'salesperson' => $first->client->salesperson?->name,
+                    'currency_code' => $first->currency->code,
+                    'current' => $this->bucketSum($items, 'current', 'balance'),
+                    'd1_30' => $this->bucketSum($items, 'd1_30', 'balance'),
+                    'd31_60' => $this->bucketSum($items, 'd31_60', 'balance'),
+                    'd61_90' => $this->bucketSum($items, 'd61_90', 'balance'),
+                    'd90_plus' => $this->bucketSum($items, 'd90_plus', 'balance'),
+                    'total' => Decimal::sum($items->pluck('balance')),
+                    'total_base' => Decimal::sum($items->pluck('base')),
+                ];
+            })
+            ->sortBy([['client_name', 'asc'], ['currency_code', 'asc']])
+            ->all();
+        $rows = array_values($rows);
+
+        return [
+            'rows' => $rows,
+            'totals' => [
+                'current' => $this->bucketSum($invoices, 'current', 'base'),
+                'd1_30' => $this->bucketSum($invoices, 'd1_30', 'base'),
+                'd61_90' => $this->bucketSum($invoices, 'd61_90', 'base'),
+                'd31_60' => $this->bucketSum($invoices, 'd31_60', 'base'),
+                'd90_plus' => $this->bucketSum($invoices, 'd90_plus', 'base'),
+                'total' => Decimal::sum($invoices->pluck('base')),
+                'total_base' => Decimal::sum($invoices->pluck('base')),
+            ],
+        ];
+    }
+
+    /** @return Collection<int, Movement> */
+    private function movements(Client $client): Collection
+    {
+        $clientInvoiceIds = Invoice::query()->where('client_id', $client->id)->select('id');
+
+        $invoices = Invoice::query()->where('client_id', $client->id)->whereNotNull('issued_at')
+            ->whereNot('status', InvoiceStatus::Cancelled)->with('currency:id,code')->get()
+            ->map(fn (Invoice $invoice) => [
+                'date' => $invoice->issue_date->toDateString(), 'id' => $invoice->id, 'currency' => $invoice->currency->code,
+                'type' => 'invoice', 'type_label' => 'Factura', 'number' => $invoice->number, 'ncf' => $invoice->ncf,
+                'description' => $invoice->kind->label(), 'debit' => Decimal::money($invoice->total), 'credit' => Decimal::money('0'),
+            ]);
+
+        $debitNotes = DebitNote::query()->whereIn('invoice_id', $clientInvoiceIds)->where('status', 'issued')
+            ->with(['currency:id,code', 'invoice:id,number'])->get()
+            ->map(fn (DebitNote $note) => [
+                'date' => $note->issue_date->toDateString(), 'id' => $note->id, 'currency' => $note->currency->code,
+                'type' => 'debit_note', 'type_label' => 'Nota de débito', 'number' => $note->number, 'ncf' => $note->ncf,
+                'description' => 'Sobre factura '.$note->invoice->number, 'debit' => Decimal::money($note->total), 'credit' => Decimal::money('0'),
+            ]);
+
+        $creditNotes = CreditNote::query()->whereIn('invoice_id', $clientInvoiceIds)->where('status', 'issued')
+            ->with(['currency:id,code', 'invoice:id,number'])->get()
+            ->map(fn (CreditNote $note) => [
+                'date' => $note->issue_date->toDateString(), 'id' => $note->id, 'currency' => $note->currency->code,
+                'type' => 'credit_note', 'type_label' => 'Nota de crédito', 'number' => $note->number, 'ncf' => $note->ncf,
+                'description' => 'Sobre factura '.$note->invoice->number, 'debit' => Decimal::money('0'), 'credit' => Decimal::money($note->total),
+            ]);
+
+        $payments = ReceiptApplication::query()
+            ->whereHas('receipt', fn (Builder $query) => $query->where('client_id', $client->id)->where('status', ReceiptStatus::Posted))
+            ->with(['receipt.currency:id,code', 'receipt:id,number,receipt_date,currency_id', 'invoice:id,number'])->get()
+            ->map(fn (ReceiptApplication $application) => [
+                'date' => $application->receipt->receipt_date->toDateString(), 'id' => $application->id, 'currency' => $application->receipt->currency->code,
+                'type' => 'payment', 'type_label' => 'Cobro', 'number' => $application->receipt->number, 'ncf' => null,
+                'description' => 'Aplicado a factura '.$application->invoice->number, 'debit' => Decimal::money('0'), 'credit' => Decimal::money($application->amount),
+            ]);
+
+        return $invoices->concat($debitNotes)->concat($creditNotes)->concat($payments)->values();
+    }
+
+    /** @param Collection<int, Movement> $movements */
+    private function net(Collection $movements): string
+    {
+        return Decimal::money(Decimal::of(Decimal::sum($movements->pluck('debit')))->minus(Decimal::sum($movements->pluck('credit'))));
+    }
+
+    /** @param Collection<int, AgingItem> $items */
+    private function bucketSum(Collection $items, string $bucket, string $amountKey): string
+    {
+        return Decimal::sum($items->filter(fn (array $item) => $item['bucket'] === $bucket)->pluck($amountKey));
+    }
+}

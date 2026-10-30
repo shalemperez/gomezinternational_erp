@@ -326,3 +326,46 @@ export type Receipt = {
     canceller?: { id: number; name: string } | null;
     applications?: ReceiptApplication[];
 };
+
+export type StatementMovement = {
+    date: string;
+    type: string;
+    type_label: string;
+    number: string | null;
+    ncf: string | null;
+    description: string;
+    debit: string;
+    credit: string;
+    balance: string;
+};
+export type ClientStatement = Record<
+    string,
+    {
+        opening_balance: string;
+        rows: StatementMovement[];
+        closing_balance: string;
+    }
+>;
+export type AgingRow = {
+    client_id: number;
+    client_code: string;
+    client_name: string;
+    salesperson: string | null;
+    currency_code: string;
+    current: string;
+    d1_30: string;
+    d31_60: string;
+    d61_90: string;
+    d90_plus: string;
+    total: string;
+    total_base: string;
+};
+export type AgingTotals = {
+    current: string;
+    d1_30: string;
+    d61_90: string;
+    d31_60: string;
+    d90_plus: string;
+    total: string;
+    total_base: string;
+};
