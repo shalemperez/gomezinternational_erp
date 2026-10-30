@@ -6,6 +6,7 @@ use App\Enums\NcfType;
 use App\Enums\StockMovementType;
 use App\Models\Client;
 use App\Models\Currency;
+use App\Models\EcfCertificate;
 use App\Models\FinancialAccount;
 use App\Models\Invoice;
 use App\Models\NcfSequence;
@@ -14,6 +15,7 @@ use App\Models\Salesperson;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\Ecf\CertificateStore;
 use App\Services\Inventory\InventoryService;
 use App\Support\FiscalId;
 use App\Support\Inventory\StockLine;
@@ -236,4 +238,20 @@ function validReceiptPayload(Invoice $invoice, array $over = []): array
         'reference' => 'TRX-1', 'amount_received' => $invoice->balance, 'retention_itbis' => '0', 'retention_isr' => '0', 'notes' => '',
         'applications' => [['invoice_id' => $invoice->id, 'amount' => $invoice->balance]],
     ], $over);
+}
+
+/** Self-signed RSA-2048 certificate exported as PKCS#12 (binary), subject serialNumber = RNC as the DGII requires. */
+function fakeP12(string $password = 'secret', string $rnc = '131880738', int $days = 365): string
+{
+    $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+    $csr = openssl_csr_new(['countryName' => 'DO', 'organizationName' => 'Gomez International SRL', 'commonName' => 'Prueba Gomez', 'serialNumber' => $rnc], $key, ['digest_alg' => 'sha256']);
+    $cert = openssl_csr_sign($csr, null, $key, $days, ['digest_alg' => 'sha256']);
+    openssl_pkcs12_export($cert, $p12, $key, $password);
+
+    return $p12;
+}
+
+function activeCertificate(?User $actor = null): EcfCertificate
+{
+    return app(CertificateStore::class)->store(fakeP12(), 'secret', $actor ?? User::factory()->create(), 'Certificado de prueba');
 }
