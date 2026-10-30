@@ -9,3 +9,8 @@ test('rule validates by type with spanish messages', function () {
         ->and(Validator::make(['v' => '00113918205'], ['v' => [new DominicanTaxId('cedula')]])->passes())->toBeTrue()
         ->and(Validator::make(['v' => '00113918204'], ['v' => [new DominicanTaxId('cedula')]])->errors()->first('v'))->toBe('La cédula debe tener 11 dígitos y un dígito verificador válido.');
 });
+
+test('array input fails validation instead of crashing', function () {
+    expect(Validator::make(['v' => ['101850043']], ['v' => [new DominicanTaxId('rnc')]])->errors()->first('v'))->toBe('El RNC debe tener 9 dígitos y un dígito verificador válido.')
+        ->and(Validator::make(['v' => ['x']], ['v' => [new DominicanTaxId('cedula')]])->errors()->first('v'))->toBe('La cédula debe tener 11 dígitos y un dígito verificador válido.');
+});

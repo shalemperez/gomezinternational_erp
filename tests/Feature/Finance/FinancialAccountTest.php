@@ -19,3 +19,10 @@ test('bank account requires bank name and number and the number is unique per ba
     $this->post(route('finance.accounts.store'), validFinancialAccountPayload(['type' => 'cash', 'name' => 'Caja chica', 'bank_name' => '', 'account_number' => '']))->assertRedirect(route('finance.accounts.index'));
     expect(FinancialAccount::where('type', 'cash')->first()->bank_name)->toBeNull();
 });
+
+test('switching an account to cash clears the bank fields', function () {
+    actingAsRole('accounting');
+    $account = FinancialAccount::factory()->create(['type' => 'bank', 'bank_name' => 'Banco Popular', 'account_number' => '1']);
+    $this->put(route('finance.accounts.update', $account), validFinancialAccountPayload(['type' => 'cash', 'name' => 'Caja', 'bank_name' => 'Banco Popular', 'account_number' => '1']))->assertRedirect(route('finance.accounts.index'));
+    expect($account->fresh()->bank_name)->toBeNull()->and($account->fresh()->account_number)->toBeNull();
+});

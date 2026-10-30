@@ -61,7 +61,7 @@ class StoreClientRequest extends FormRequest
             'email' => ['nullable', 'email', 'max:255'],
             'salesperson_id' => ['nullable', 'integer', 'exists:salespeople,id'],
             'credit_days' => ['required', 'integer', 'between:0,365'],
-            'credit_limit' => ['required', 'numeric', 'min:0', 'regex:/^\d{1,12}(\.\d{1,2})?$/'],
+            'credit_limit' => ['required', 'numeric', 'min:0', 'max:999999999999.99', 'regex:/^\d{1,12}(\.\d{1,2})?$/'],
             'price_list_id' => ['nullable', 'integer', 'exists:price_lists,id'],
             'currency_id' => ['required', 'integer', 'exists:currencies,id'],
             'notes' => ['nullable', 'string', 'max:2000'],

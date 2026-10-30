@@ -17,7 +17,7 @@ class UpdatePriceListItemsRequest extends FormRequest
         return [
             'items' => ['present', 'array'],
             'items.*.product_id' => ['required', 'integer', 'exists:products,id', 'distinct'],
-            'items.*.price' => ['nullable', 'numeric', 'min:0', 'regex:/^\d{1,10}(\.\d{1,4})?$/'],
+            'items.*.price' => ['nullable', 'numeric', 'min:0', 'max:9999999999.9999', 'regex:/^\d{1,10}(\.\d{1,4})?$/'],
         ];
     }
 }

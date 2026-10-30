@@ -26,6 +26,9 @@ class StoreFinancialAccountRequest extends FormRequest
                 $this->merge([$field => null]);
             }
         }
+        if ($this->input('type') === 'cash') {
+            $this->merge(['bank_name' => null, 'account_number' => null]);
+        }
     }
 
     /** @return array<string, mixed> */

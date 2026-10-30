@@ -46,3 +46,11 @@ test('index filters by brand and sales and warehouse can view but not create', f
     $this->get(route('catalog.products.index'))->assertOk()->assertInertia(fn ($p) => $p->where('rows.total', 2));
     $this->post(route('catalog.products.store'), validProductPayload())->assertForbidden();
 });
+
+test('numeric fields are bounded with spanish errors instead of database errors', function () {
+    actingAsRole('owner');
+    $this->post(route('catalog.products.store'), validProductPayload(['weight_kg' => '99999999', 'volume_liters' => '1000000', 'minimum_stock' => '99999999999', 'alcohol_degree' => '1.234']))
+        ->assertSessionHasErrors(['weight_kg', 'volume_liters', 'minimum_stock', 'alcohol_degree']);
+    $this->post(route('catalog.products.store'), validProductPayload(['weight_kg' => '999999.9999', 'volume_liters' => '0.75', 'minimum_stock' => '9999999999.9999', 'alcohol_degree' => '37.5']))
+        ->assertRedirect(route('catalog.products.index'));
+});

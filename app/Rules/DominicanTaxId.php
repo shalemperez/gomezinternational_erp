@@ -12,7 +12,11 @@ class DominicanTaxId implements ValidationRule
 
     public function validate(string $attribute, mixed $value, Closure $fail): void
     {
-        $value = (string) $value;
+        if (! is_string($value)) {
+            $fail($this->type === 'cedula' ? 'La cédula debe tener 11 dígitos y un dígito verificador válido.' : 'El RNC debe tener 9 dígitos y un dígito verificador válido.');
+
+            return;
+        }
         if ($this->type === 'rnc' && ! FiscalId::isValidRnc($value)) {
             $fail('El RNC debe tener 9 dígitos y un dígito verificador válido.');
         }

@@ -27,6 +27,11 @@ class StoreAdditionalTaxRequest extends FormRequest
             'amount' => $this->input('amount') === '' ? null : $this->input('amount'),
             'dgii_code' => $this->input('dgii_code') === '' ? null : $this->input('dgii_code'),
         ]);
+        if ($this->input('calculation_type') === 'percent_of_base') {
+            $this->merge(['amount' => null]);
+        } elseif ($this->filled('calculation_type')) {
+            $this->merge(['rate' => null]);
+        }
     }
 
     /** @return array<string, mixed> */
