@@ -51,12 +51,15 @@ export function ProductPicker({
                         credentials: 'same-origin',
                     },
                 );
+                if (!response.ok) {
+                    return;
+                }
                 const body = (await response.json()) as {
                     data: PickedProduct[];
                 };
 
                 if (active) {
-                    setResults(body.data);
+                    setResults(Array.isArray(body.data) ? body.data : []);
                 }
             } catch {
                 // Network failure: keep the previous results.

@@ -19,6 +19,9 @@ class UpdateNcfSequenceRequest extends StoreNcfSequenceRequest
             if ($this->string('ncf_type')->toString() !== $sequence->ncf_type->value) {
                 $v->errors()->add('ncf_type', 'No se puede cambiar el tipo de una secuencia usada.');
             }
+            if ($this->integer('range_from') !== $sequence->range_from) {
+                $v->errors()->add('range_from', 'No se puede cambiar el inicio de una secuencia usada.');
+            }
             $lastIssued = $sequence->next_number - 1;
             if ($this->integer('range_to') < $lastIssued) {
                 $v->errors()->add('range_to', "La secuencia ya emitió hasta el número {$lastIssued}.");

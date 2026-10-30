@@ -62,7 +62,14 @@ class NcfSequenceController extends Controller
     #[Middleware('permission:fiscal.sequences.manage')]
     public function update(UpdateNcfSequenceRequest $request, NcfSequence $ncfSequence): RedirectResponse
     {
-        $ncfSequence->update($request->validated());
+        $data = $request->validated();
+        if ($ncfSequence->next_number <= $ncfSequence->range_from) {
+            $data['next_number'] = $data['range_from']; // unused sequence: numbering starts at the new range_from
+        }
+        if ($ncfSequence->exhausted_at !== null && (int) $data['range_to'] >= $ncfSequence->next_number) {
+            $data['exhausted_at'] = null;
+        }
+        $ncfSequence->update($data);
 
         return redirect()->route('admin.ncf-sequences.index')->with('success', 'Secuencia actualizada');
     }

@@ -59,3 +59,30 @@ test('alerts report low remaining, expiring, expired and missing sales sequences
     Notification::assertSentTo($owner, NcfSequenceAlert::class);
     expect(Activity::inLog('ncf_sequences')->where('event', 'alerts_checked')->exists())->toBeTrue();
 });
+
+test('editing an unused sequence moves next_number to the new range start', function () {
+    actingAsRole('owner');
+    $seq = activeSequence('B01', ['range_from' => 1, 'range_to' => 100, 'next_number' => 1]);
+    $this->put(route('admin.ncf-sequences.update', $seq), validNcfSequencePayload(['range_from' => 500, 'range_to' => 600]))->assertRedirect(route('admin.ncf-sequences.index'));
+    expect($seq->fresh()->next_number)->toBe(500)->and($seq->fresh()->range_from)->toBe(500);
+});
+
+test('a used sequence cannot change its range start', function () {
+    actingAsRole('owner');
+    $seq = activeSequence('B01', ['range_from' => 1, 'range_to' => 100, 'next_number' => 40]);
+    $this->put(route('admin.ncf-sequences.update', $seq), validNcfSequencePayload(['range_from' => 10]))->assertSessionHasErrors(['range_from' => 'No se puede cambiar el inicio de una secuencia usada.']);
+    expect($seq->fresh()->range_from)->toBe(1);
+});
+
+test('extending an exhausted sequence clears exhausted_at', function () {
+    actingAsRole('owner');
+    $seq = activeSequence('B01', ['range_from' => 1, 'range_to' => 100, 'next_number' => 101, 'exhausted_at' => now()]);
+    $this->put(route('admin.ncf-sequences.update', $seq), validNcfSequencePayload(['range_to' => 200]))->assertRedirect(route('admin.ncf-sequences.index'));
+    expect($seq->fresh()->exhausted_at)->toBeNull();
+});
+
+test('a sequence expiring today is still usable and not reported as expired', function () {
+    activeSequence('B01', ['range_from' => 1, 'range_to' => 1000, 'next_number' => 1, 'expires_on' => today()->toDateString()]);
+    $alerts = collect(app(SequenceAlerts::class)->current())->where('ncf_type', 'B01');
+    expect($alerts->where('reason', 'expired'))->toHaveCount(0);
+});
