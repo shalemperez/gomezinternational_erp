@@ -3,7 +3,10 @@ export type ImporterInfo = {
     label: string;
     columns: { label: string; required: boolean }[];
     templateUrl: string;
-    meta: { price_lists?: { id: number; name: string }[] };
+    meta: {
+        price_lists?: { id: number; name: string }[];
+        warehouses?: { id: number; name: string }[];
+    };
 };
 
 export type ImportBatchRow = {

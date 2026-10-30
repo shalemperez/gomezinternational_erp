@@ -116,6 +116,44 @@ export default function ImportsIndex({ importers, batches }: Props) {
                                                     </Select>
                                                 </FormField>
                                             )}
+                                            {importer.meta.warehouses && (
+                                                <FormField
+                                                    label="Almacén"
+                                                    htmlFor="warehouse_id"
+                                                    error={errors.warehouse_id}
+                                                    required
+                                                >
+                                                    <Select
+                                                        name="warehouse_id"
+                                                        required
+                                                    >
+                                                        <SelectTrigger
+                                                            id="warehouse_id"
+                                                            className="w-full"
+                                                        >
+                                                            <SelectValue placeholder="Seleccione un almacén" />
+                                                        </SelectTrigger>
+                                                        <SelectContent>
+                                                            {importer.meta.warehouses.map(
+                                                                (warehouse) => (
+                                                                    <SelectItem
+                                                                        key={
+                                                                            warehouse.id
+                                                                        }
+                                                                        value={String(
+                                                                            warehouse.id,
+                                                                        )}
+                                                                    >
+                                                                        {
+                                                                            warehouse.name
+                                                                        }
+                                                                    </SelectItem>
+                                                                ),
+                                                            )}
+                                                        </SelectContent>
+                                                    </Select>
+                                                </FormField>
+                                            )}
                                             <input
                                                 type="file"
                                                 name="file"

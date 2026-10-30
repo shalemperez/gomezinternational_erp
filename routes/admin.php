@@ -20,7 +20,7 @@ Route::middleware(['auth'])->prefix('admin')->name('admin.')->group(function () 
     Route::resource('ncf-sequences', NcfSequenceController::class)->except(['show', 'destroy'])->parameters(['ncf-sequences' => 'ncfSequence']);
     Route::get('activity-log/export', [ActivityLogController::class, 'export'])->name('activity-log.export');
     Route::get('activity-log', [ActivityLogController::class, 'index'])->name('activity-log.index');
-    Route::middleware('permission:catalog.clients.import|catalog.suppliers.import|catalog.products.import|catalog.price-lists.import')->group(function () {
+    Route::middleware('permission:catalog.clients.import|catalog.suppliers.import|catalog.products.import|catalog.price-lists.import|inventory.initial-stock.import|sales.historical-invoices.import')->group(function () {
         Route::get('imports', [ImportController::class, 'index'])->name('imports.index');
         Route::get('imports/{type}/template', [ImportController::class, 'template'])->name('imports.template');
         Route::post('imports/{type}', [ImportController::class, 'preview'])->name('imports.preview');

@@ -10,6 +10,7 @@ use App\Imports\ImporterRegistry;
 use App\Imports\TemplateExport;
 use App\Models\ImportBatch;
 use App\Models\PriceList;
+use App\Models\Warehouse;
 use App\Services\DataImport\ImportService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -100,6 +101,10 @@ class ImportController extends Controller
     {
         if ($importer::type() === 'price_list_items') {
             return ['price_lists' => PriceList::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])];
+        }
+
+        if ($importer::type() === 'initial_stock') {
+            return ['warehouses' => Warehouse::query()->where('is_active', true)->orderBy('name')->get(['id', 'name'])];
         }
 
         return [];
