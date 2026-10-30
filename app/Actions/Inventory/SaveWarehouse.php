@@ -12,10 +12,10 @@ class SaveWarehouse
     {
         return DB::transaction(function () use ($data, $warehouse): Warehouse {
             $warehouse ??= new Warehouse;
-            $warehouse->fill($data)->save();
-            if ($warehouse->is_default) {
-                Warehouse::query()->whereKeyNot($warehouse->id)->where('is_default', true)->get()->each->update(['is_default' => false]);
+            if (($data['is_default'] ?? false) === true) {
+                Warehouse::query()->whereKeyNot($warehouse->getKey() ?? 0)->where('is_default', true)->get()->each->update(['is_default' => false]);
             }
+            $warehouse->fill($data)->save();
 
             return $warehouse;
         });

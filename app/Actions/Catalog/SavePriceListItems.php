@@ -14,8 +14,9 @@ class SavePriceListItems
     {
         return DB::transaction(function () use ($list, $items): int {
             $changed = 0;
+            $existingItems = $list->items()->get()->keyBy('product_id');
             foreach ($items as $item) {
-                $existing = PriceListItem::query()->where('price_list_id', $list->id)->where('product_id', $item['product_id'])->first();
+                $existing = $existingItems->get($item['product_id']);
                 $price = $item['price'] ?? null;
                 if ($price === null || $price === '') {
                     if ($existing !== null) {

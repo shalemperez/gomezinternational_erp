@@ -60,7 +60,7 @@ class SupplierController extends Controller
                 'tax_id_override_by_name' => $supplier->taxIdOverrideBy?->name,
             ],
             'history' => AuditHistory::for($supplier),
-            ...$this->formOptions($request),
+            ...$this->formOptions($request, $supplier),
         ]);
     }
 
@@ -119,11 +119,11 @@ class SupplierController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function formOptions(Request $request): array
+    private function formOptions(Request $request, ?Supplier $supplier = null): array
     {
         return [
             'countries' => $this->countryOptions(),
-            'currencies' => Currency::query()->active()->orderBy('code')->get(['id', 'code', 'name']),
+            'currencies' => Currency::query()->where(fn (Builder $query) => $query->active()->orWhereKey($supplier?->currency_id))->orderBy('code')->get(['id', 'code', 'name']),
             'canOverride' => $request->user()->can('catalog.tax-ids.override-validation'),
         ];
     }

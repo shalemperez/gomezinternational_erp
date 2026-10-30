@@ -67,7 +67,7 @@ class ClientController extends Controller
                 'tax_id_override_by_name' => $client->taxIdOverrideBy?->name,
             ],
             'history' => AuditHistory::for($client),
-            ...$this->formOptions($request),
+            ...$this->formOptions($request, $client),
         ]);
     }
 
@@ -135,12 +135,12 @@ class ClientController extends Controller
     }
 
     /** @return array<string, mixed> */
-    private function formOptions(Request $request): array
+    private function formOptions(Request $request, ?Client $client = null): array
     {
         return [
-            'salespeople' => Salesperson::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'priceLists' => PriceList::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
-            'currencies' => Currency::query()->active()->orderBy('code')->get(['id', 'code', 'name']),
+            'salespeople' => Salesperson::query()->where(fn (Builder $query) => $query->where('is_active', true)->orWhereKey($client?->salesperson_id))->orderBy('name')->get(['id', 'name']),
+            'priceLists' => PriceList::query()->where(fn (Builder $query) => $query->where('is_active', true)->orWhereKey($client?->price_list_id))->orderBy('name')->get(['id', 'name']),
+            'currencies' => Currency::query()->where(fn (Builder $query) => $query->active()->orWhereKey($client?->currency_id))->orderBy('code')->get(['id', 'code', 'name']),
             'taxIdTypes' => array_map(fn (TaxIdType $type) => ['value' => $type->value, 'label' => $type->label()], TaxIdType::cases()),
             'taxpayerTypes' => array_map(fn (TaxpayerType $type) => ['value' => $type->value, 'label' => $type->label()], TaxpayerType::cases()),
             'defaultCurrencyId' => Currency::base()->id,

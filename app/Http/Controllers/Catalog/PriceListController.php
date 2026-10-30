@@ -102,14 +102,18 @@ class PriceListController extends Controller
         ], $request->string('format', 'xlsx')->toString());
     }
 
-    #[Middleware('permission:catalog.price-lists.update')]
-    public function items(PriceList $priceList): Response
+    #[Middleware('permission:catalog.price-lists.view')]
+    public function items(Request $request, PriceList $priceList): Response
     {
         $prices = $priceList->items()->pluck('price', 'product_id');
         $products = Product::query()->active()->orderBy('name')->get(['id', 'sku', 'name'])
             ->map(fn (Product $p) => ['id' => $p->id, 'sku' => $p->sku, 'name' => $p->name, 'price' => isset($prices[$p->id]) ? (string) $prices[$p->id] : null])->values()->all();
 
-        return Inertia::render('catalog/price-lists/items', ['list' => $priceList->load('currency:id,code'), 'products' => $products]);
+        return Inertia::render('catalog/price-lists/items', [
+            'list' => $priceList->load('currency:id,code'),
+            'products' => $products,
+            'canEdit' => $request->user()->can('catalog.price-lists.update'),
+        ]);
     }
 
     #[Middleware('permission:catalog.price-lists.update')]

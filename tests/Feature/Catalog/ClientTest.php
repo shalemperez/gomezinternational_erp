@@ -2,6 +2,7 @@
 
 use App\Models\Client;
 use App\Models\ClientContact;
+use App\Models\PriceList;
 use App\Models\Salesperson;
 use Spatie\Activitylog\Models\Activity;
 
@@ -145,4 +146,13 @@ test('editing an overridden client without changing its tax id keeps the overrid
     $this->put(route('catalog.clients.update', $c), validClientPayload(['tax_id' => '101850042', 'business_name' => 'Nombre Editado SRL']))->assertRedirect(route('catalog.clients.index'));
     $c->refresh();
     expect($c->business_name)->toBe('Nombre Editado SRL')->and($c->tax_id_validation_overridden)->toBeTrue()->and($c->tax_id_override_reason)->toBe('x');
+});
+
+test('edit form keeps the current inactive salesperson and price list as options', function () {
+    actingAsRole('owner');
+    $sp = Salesperson::factory()->create(['is_active' => false]);
+    $pl = PriceList::factory()->create(['is_active' => false]);
+    $client = Client::factory()->create(['salesperson_id' => $sp->id, 'price_list_id' => $pl->id]);
+    $this->get(route('catalog.clients.edit', $client))->assertInertia(fn ($p) => $p->where('salespeople.0.id', $sp->id)->where('priceLists.0.id', $pl->id));
+    $this->get(route('catalog.clients.create'))->assertInertia(fn ($p) => $p->where('salespeople', [])->where('priceLists', []));
 });

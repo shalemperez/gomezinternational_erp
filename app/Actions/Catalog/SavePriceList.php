@@ -12,10 +12,10 @@ class SavePriceList
     {
         return DB::transaction(function () use ($data, $list): PriceList {
             $list ??= new PriceList;
-            $list->fill($data)->save();
-            if ($list->is_default) {
-                PriceList::query()->whereKeyNot($list->id)->where('is_default', true)->get()->each->update(['is_default' => false]);
+            if (($data['is_default'] ?? false) === true) {
+                PriceList::query()->whereKeyNot($list->getKey() ?? 0)->where('is_default', true)->get()->each->update(['is_default' => false]);
             }
+            $list->fill($data)->save();
 
             return $list;
         });

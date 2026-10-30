@@ -2,6 +2,8 @@
 
 use App\Models\Warehouse;
 use Database\Seeders\WarehouseSeeder;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 
 crudResourceTests([
     'label' => 'warehouses', 'routePrefix' => 'inventory.warehouses', 'component' => 'inventory/warehouses/index', 'model' => Warehouse::class, 'table' => 'warehouses', 'routeParam' => 'warehouse',
@@ -55,4 +57,12 @@ test('a non default warehouse can be deactivated', function () {
     $w = Warehouse::factory()->create(['is_default' => false]);
     $this->put(route('inventory.warehouses.update', $w), validWarehousePayload(['code' => $w->code, 'is_default' => '', 'is_active' => '']))->assertRedirect();
     expect($w->fresh()->is_active)->toBeFalse();
+});
+
+test('the database refuses a second default warehouse', function () {
+    Warehouse::factory()->create(['is_default' => true]);
+    expect(fn () => DB::transaction(fn () => Warehouse::factory()->create(['is_default' => true])))->toThrow(QueryException::class);
+    actingAsRole('owner');
+    $this->post(route('inventory.warehouses.store'), validWarehousePayload(['code' => 'NUEVO', 'is_default' => 'on']))->assertRedirect(route('inventory.warehouses.index'));
+    expect(Warehouse::where('is_default', true)->count())->toBe(1)->and(Warehouse::default()->code)->toBe('NUEVO');
 });

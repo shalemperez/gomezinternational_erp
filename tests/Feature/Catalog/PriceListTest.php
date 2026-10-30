@@ -3,6 +3,8 @@
 use App\Models\PriceList;
 use App\Models\PriceListItem;
 use App\Models\Product;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Spatie\Activitylog\Models\Activity;
 
 crudResourceTests([
@@ -46,7 +48,7 @@ test('items validation rejects negative prices and duplicate products', function
     $list = PriceList::factory()->create();
     $p = Product::factory()->create();
     $this->put(route('catalog.price-lists.items.update', $list), ['items' => [['product_id' => $p->id, 'price' => '-1']]])->assertSessionHasErrors(['items.0.price']);
-    $this->put(route('catalog.price-lists.items.update', $list), ['items' => [['product_id' => $p->id, 'price' => '1'], ['product_id' => $p->id, 'price' => '2']]])->assertSessionHasErrors(['items.0.product_id']);
+    $this->put(route('catalog.price-lists.items.update', $list), ['items' => [['product_id' => $p->id, 'price' => '1'], ['product_id' => $p->id, 'price' => '2']]])->assertSessionHasErrors(['items.1.product_id']);
 });
 
 test('items page lists products with current prices', function () {
@@ -95,4 +97,33 @@ test('saving items without changes writes no items_updated row', function () {
 
     $this->put(route('catalog.price-lists.items.update', $list), ['items' => []])->assertRedirect();
     expect(Activity::inLog('price_lists')->where('event', 'items_updated')->count())->toBe($before);
+});
+
+test('sales can view the items page read-only but cannot save prices', function () {
+    actingAsRole('sales');
+    $list = PriceList::factory()->create();
+    $p = Product::factory()->create();
+    PriceListItem::factory()->create(['price_list_id' => $list->id, 'product_id' => $p->id, 'price' => '5.0000']);
+    $this->get(route('catalog.price-lists.items', $list))->assertOk()->assertInertia(fn ($pg) => $pg->where('canEdit', false)->where('products.0.price', '5.0000'));
+    $this->put(route('catalog.price-lists.items.update', $list), ['items' => [['product_id' => $p->id, 'price' => '1']]])->assertForbidden();
+});
+
+test('items validation uses one query for product ids and reports unknown and duplicated products', function () {
+    actingAsRole('owner');
+    $list = PriceList::factory()->create();
+    $p = Product::factory()->create();
+    DB::enableQueryLog();
+    $this->put(route('catalog.price-lists.items.update', $list), ['items' => [['product_id' => $p->id, 'price' => '1'], ['product_id' => 999999, 'price' => '2'], ['product_id' => $p->id, 'price' => '3']]])
+        ->assertSessionHasErrors(['items.1.product_id' => 'El producto no existe.', 'items.2.product_id' => 'Producto repetido en la lista.']);
+    $productQueries = collect(DB::getQueryLog())->filter(fn ($q) => str_contains($q['query'], 'from "products"'))->count();
+    DB::disableQueryLog();
+    expect($productQueries)->toBe(1);
+});
+
+test('the database refuses a second default price list', function () {
+    PriceList::factory()->create(['is_default' => true]);
+    expect(fn () => DB::transaction(fn () => PriceList::factory()->create(['is_default' => true])))->toThrow(QueryException::class);
+    actingAsRole('owner');
+    $this->post(route('catalog.price-lists.store'), validPriceListPayload(['name' => 'Nueva predeterminada', 'is_default' => 'on']))->assertRedirect(route('catalog.price-lists.index'));
+    expect(PriceList::where('is_default', true)->count())->toBe(1)->and(PriceList::default()->name)->toBe('Nueva predeterminada');
 });

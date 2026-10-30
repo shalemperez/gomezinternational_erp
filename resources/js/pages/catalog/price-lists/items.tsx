@@ -13,6 +13,7 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { useCan } from '@/lib/can';
+import { formatNumber } from '@/lib/format';
 import { index, items } from '@/routes/catalog/price-lists';
 import {
     exportMethod as itemsExport,
@@ -23,12 +24,13 @@ import type { PriceList, PriceListProductRow } from '@/types/catalog';
 type Props = {
     list: PriceList;
     products: PriceListProductRow[];
+    canEdit: boolean;
 };
 
-export default function PriceListItems({ list, products }: Props) {
+export default function PriceListItems({ list, products, canEdit }: Props) {
     const can = useCan();
     const [search, setSearch] = useState('');
-    const { data, setData, put, processing } = useForm({
+    const { data, setData, put, processing, transform } = useForm({
         items: products.map((product) => ({
             product_id: product.id,
             price: product.price ?? '',
@@ -77,6 +79,13 @@ export default function PriceListItems({ list, products }: Props) {
                     className="flex flex-col gap-4"
                     onSubmit={(event) => {
                         event.preventDefault();
+                        transform((form) => ({
+                            items: form.items.filter(
+                                (item, position) =>
+                                    item.price !==
+                                    (products[position].price ?? ''),
+                            ),
+                        }));
                         put(updateItems.url(list.id));
                     }}
                 >
@@ -103,20 +112,32 @@ export default function PriceListItems({ list, products }: Props) {
                                         </TableCell>
                                         <TableCell>{product.name}</TableCell>
                                         <TableCell>
-                                            <Input
-                                                inputMode="decimal"
-                                                aria-label={`Precio de ${product.name}`}
-                                                value={
-                                                    data.items[position].price
-                                                }
-                                                onChange={(event) =>
-                                                    setPrice(
-                                                        position,
-                                                        event.target.value,
-                                                    )
-                                                }
-                                                className="w-40"
-                                            />
+                                            {canEdit ? (
+                                                <Input
+                                                    inputMode="decimal"
+                                                    aria-label={`Precio de ${product.name}`}
+                                                    value={
+                                                        data.items[position]
+                                                            .price
+                                                    }
+                                                    onChange={(event) =>
+                                                        setPrice(
+                                                            position,
+                                                            event.target.value,
+                                                        )
+                                                    }
+                                                    className="w-40"
+                                                />
+                                            ) : (
+                                                <span>
+                                                    {product.price
+                                                        ? formatNumber(
+                                                              product.price,
+                                                              4,
+                                                          )
+                                                        : '—'}
+                                                </span>
+                                            )}
                                         </TableCell>
                                     </TableRow>
                                 ))}
@@ -124,7 +145,7 @@ export default function PriceListItems({ list, products }: Props) {
                         </Table>
                     </div>
                     <div className="flex gap-2">
-                        {can('catalog.price-lists.update') && (
+                        {canEdit && (
                             <Button type="submit" disabled={processing}>
                                 Guardar precios
                             </Button>

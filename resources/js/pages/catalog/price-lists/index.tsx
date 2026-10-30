@@ -83,7 +83,7 @@ export default function PriceListIndex({ rows, filters }: Props) {
                     searchPlaceholder="Buscar…"
                     rowActions={(row) => (
                         <div className="flex justify-end gap-2">
-                            {can('catalog.price-lists.update') && (
+                            {can('catalog.price-lists.view') && (
                                 <Button variant="outline" size="sm" asChild>
                                     <Link href={items(row.id)}>Precios</Link>
                                 </Button>
