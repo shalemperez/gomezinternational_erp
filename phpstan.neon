@@ -11,3 +11,9 @@ parameters:
         - routes/
 
     level: 7
+
+    ignoreErrors:
+        # Temporary until Task 4's first model uses the trait; Task 4 removes this entry.
+        -
+            identifier: trait.unused
+            path: app/Models/Concerns/ImmutableWhenIssued.php

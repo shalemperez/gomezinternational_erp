@@ -30,6 +30,8 @@ final class PermissionCatalog
             'catalog' => 'Catálogo',
             'finance' => 'Finanzas',
             'inventory' => 'Inventario',
+            'sales' => 'Ventas',
+            'fiscal' => 'Fiscal',
         ];
     }
 
@@ -93,6 +95,52 @@ final class PermissionCatalog
         $add('inventory.warehouses.view', 'Ver almacenes', [...$all, 'warehouse']);
         $add('inventory.warehouses.manage', 'Administrar almacenes', ['owner', 'management']);
         $add('inventory.warehouses.export', 'Exportar almacenes', array_values(array_intersect([...$all, 'warehouse'], self::EXPORTERS)));
+
+        // sales (phase 2)
+        $docs = function (string $prefix, string $plural, array $viewRoles, array $createRoles, array $extra) use ($add, $all): void {
+            $add("$prefix.view", "Ver $plural", $viewRoles);
+            $add("$prefix.view-all", "Ver $plural de todos los vendedores", $all);
+            $add("$prefix.create", "Crear $plural", $createRoles);
+            $add("$prefix.update", "Editar $plural en borrador", $createRoles);
+            $add("$prefix.export", "Exportar $plural", array_values(array_intersect($viewRoles, self::EXPORTERS)));
+            foreach ($extra as $action => [$label, $roles]) {
+                $add("$prefix.$action", $label, $roles);
+            }
+        };
+        $docs('sales.proformas', 'proformas', [...$all, 'sales'], [...$all, 'sales'], ['approve' => ['Aprobar proformas', [...$all, 'sales']], 'delete' => ['Eliminar proformas en borrador', [...$all, 'sales']], 'send' => ['Enviar proformas por correo', [...$all, 'sales']]]);
+        $docs('sales.invoices', 'facturas', [...$all, 'sales'], [...$all, 'sales'], ['issue' => ['Emitir facturas', [...$all, 'sales']], 'cancel' => ['Anular facturas', $all], 'send' => ['Enviar facturas por correo', [...$all, 'sales']], 'credit-override' => ['Autorizar exceso de límite de crédito', ['owner', 'management']], 'delete' => ['Eliminar facturas en borrador', [...$all, 'sales']]]);
+        $add('sales.credit-notes.view', 'Ver notas de crédito', [...$all, 'sales']);
+        $add('sales.credit-notes.create', 'Crear y emitir notas de crédito', $all);
+        $add('sales.credit-notes.export', 'Exportar notas de crédito', $all);
+        $add('sales.debit-notes.view', 'Ver notas de débito', [...$all, 'sales']);
+        $add('sales.debit-notes.create', 'Crear y emitir notas de débito', $all);
+        $add('sales.debit-notes.export', 'Exportar notas de débito', $all);
+        $add('sales.receipts.view', 'Ver recibos de ingreso', [...$all, 'sales']);
+        $add('sales.receipts.create', 'Registrar recibos de ingreso', $all);
+        $add('sales.receipts.cancel', 'Anular recibos de ingreso', ['owner', 'management', 'accounting']);
+        $add('sales.receipts.export', 'Exportar recibos', $all);
+        $add('sales.statements.view', 'Ver estados de cuenta y antigüedad', [...$all, 'sales']);
+        $add('sales.statements.send', 'Enviar estados de cuenta por correo', [...$all, 'sales']);
+        $add('sales.historical-invoices.import', 'Importar facturas históricas', ['owner', 'accounting']);
+
+        // fiscal (phase 2 subset)
+        $add('fiscal.sequences.view', 'Ver secuencias NCF', $all);
+        $add('fiscal.sequences.manage', 'Administrar secuencias NCF', ['owner', 'accounting']);
+        $add('fiscal.mode.manage', 'Cambiar modo fiscal (NCF/e-CF)', ['owner']);
+
+        // inventory (phase 2 subset)
+        $add('inventory.stock.view', 'Ver existencias', [...$all, 'sales', 'warehouse']);
+        $add('inventory.stock.view-costs', 'Ver costos de inventario', $all);
+        $add('inventory.movements.view', 'Ver movimientos de inventario (kardex)', [...$all, 'warehouse']);
+        $add('inventory.lots.view', 'Ver lotes y vencimientos', [...$all, 'sales', 'warehouse']);
+        $add('inventory.dispatches.view', 'Ver conduces', [...$all, 'sales', 'warehouse']);
+        $add('inventory.dispatches.create', 'Crear conduces', [...$all, 'warehouse']);
+        $add('inventory.dispatches.confirm', 'Confirmar conduces (salida de almacén)', [...$all, 'warehouse']);
+        $add('inventory.initial-stock.import', 'Cargar existencias iniciales', ['owner', 'accounting', 'warehouse']);
+        $add('inventory.alerts.receive', 'Recibir alertas de stock mínimo y vencimientos', ['owner', 'management', 'warehouse']);
+        $add('inventory.dispatches.export', 'Exportar conduces', array_values(array_intersect([...$all, 'sales', 'warehouse'], self::EXPORTERS)));
+        $add('inventory.stock.export', 'Exportar existencias', array_values(array_intersect([...$all, 'sales', 'warehouse'], self::EXPORTERS)));
+        $add('inventory.movements.export', 'Exportar movimientos de inventario', $all);
 
         return $p;
     }
