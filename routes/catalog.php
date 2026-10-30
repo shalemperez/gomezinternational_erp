@@ -3,6 +3,7 @@
 use App\Http\Controllers\Catalog\AdditionalTaxController;
 use App\Http\Controllers\Catalog\BrandController;
 use App\Http\Controllers\Catalog\ClientController;
+use App\Http\Controllers\Catalog\ClientSearchController;
 use App\Http\Controllers\Catalog\PriceListController;
 use App\Http\Controllers\Catalog\ProductCategoryController;
 use App\Http\Controllers\Catalog\ProductController;
@@ -35,6 +36,7 @@ Route::middleware(['auth'])->prefix('catalog')->name('catalog.')->group(function
     Route::get('price-lists/{priceList}/items/export', [PriceListController::class, 'exportItems'])->name('price-lists.items.export');
     Route::resource('price-lists', PriceListController::class)->except(['show'])->parameters(['price-lists' => 'priceList']);
 
+    Route::get('clients/search', ClientSearchController::class)->name('clients.search');
     Route::get('clients/export', [ClientController::class, 'export'])->name('clients.export');
     Route::resource('clients', ClientController::class)->except(['show']);
 

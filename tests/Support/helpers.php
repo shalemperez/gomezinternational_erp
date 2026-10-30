@@ -1,7 +1,10 @@
 <?php
 
+use App\Models\Client;
 use App\Models\Currency;
 use App\Models\NcfSequence;
+use App\Models\Product;
+use App\Models\Salesperson;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Support\FiscalId;
@@ -129,4 +132,25 @@ function validNcfSequencePayload(array $over = []): array
 function activeSequence(string $type = 'B01', array $over = []): NcfSequence
 {
     return NcfSequence::factory()->create(array_merge(['ncf_type' => $type, 'range_from' => 1, 'range_to' => 100, 'next_number' => 1, 'expires_on' => in_array($type, ['B02', 'B04'], true) ? null : now()->addYear()->toDateString(), 'is_active' => true], $over));
+}
+
+/** A sales-role user linked to a salesperson (the shape every scoped-document test needs). */
+function salesUserWithSalesperson(): array
+{
+    $user = actingAsRole('sales');
+    $salesperson = Salesperson::factory()->create(['user_id' => $user->id]);
+
+    return ['user' => $user, 'salesperson' => $salesperson];
+}
+
+function validProformaPayload(array $over = []): array
+{
+    $client = Client::factory()->create();
+    $product = Product::factory()->create(['itbis_rate' => '18.00']);
+
+    return array_merge([
+        'client_id' => $client->id, 'salesperson_id' => '', 'currency_id' => Currency::base()->id, 'issue_date' => now()->toDateString(),
+        'valid_until' => now()->addDays(15)->toDateString(), 'price_list_id' => '', 'notes' => '',
+        'lines' => [['product_id' => $product->id, 'description' => '', 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '0']],
+    ], $over);
 }

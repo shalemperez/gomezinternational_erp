@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\CheckNcfSequences;
+use App\Jobs\ExpireProformas;
 use App\Jobs\FetchDailyExchangeRates;
 use App\Services\Settings;
 use Illuminate\Foundation\Inspiring;
@@ -16,3 +17,5 @@ Schedule::job(new FetchDailyExchangeRates)
     ->when(fn () => app(Settings::class)->get('exchange_rates.source', 'manual') !== 'manual');
 
 Schedule::job(new CheckNcfSequences)->dailyAt('07:30');
+
+Schedule::job(new ExpireProformas)->dailyAt('00:10');

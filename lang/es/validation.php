@@ -60,6 +60,9 @@ return [
     'custom' => [],
 
     'attributes' => [
+        'client_id' => 'el cliente', 'salesperson_id' => 'el vendedor', 'currency_id' => 'la moneda', 'issue_date' => 'la fecha',
+        'valid_until' => 'la validez', 'lines' => 'las líneas', 'lines.*.product_id' => 'el producto', 'lines.*.quantity' => 'la cantidad',
+        'lines.*.unit_price' => 'el precio', 'lines.*.discount_percent' => 'el descuento', 'to' => 'los destinatarios',
         'name' => 'el nombre', 'email' => 'el correo electrónico', 'code' => 'el código', 'roles' => 'los roles',
         'business_name' => 'la razón social', 'trade_name' => 'el nombre comercial', 'tax_id' => 'el RNC/cédula', 'tax_id_type' => 'el tipo de identificación',
         'taxpayer_type' => 'el tipo de contribuyente', 'address' => 'la dirección', 'city' => 'la ciudad', 'phone' => 'el teléfono',

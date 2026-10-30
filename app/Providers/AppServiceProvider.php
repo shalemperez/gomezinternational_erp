@@ -5,7 +5,9 @@ namespace App\Providers;
 use App\Contracts\GmailSender;
 use App\Listeners\LogAccessChanges;
 use App\Models\ActivityLog;
+use App\Models\Proforma;
 use App\Models\User;
+use App\Policies\ProformaPolicy;
 use App\Services\Mail\GoogleGmailSender;
 use App\Services\Mail\LogGmailSender;
 use App\Services\Settings;
@@ -43,6 +45,7 @@ class AppServiceProvider extends ServiceProvider
         self::configureTrustedProxies();
 
         Gate::before(fn (User $user, string $ability) => $user->isSuperAdmin() ? true : null);
+        Gate::policy(Proforma::class, ProformaPolicy::class);
 
         ActivityLog::creating(function (ActivityLog $activity): void {
             // `request.id` is bound only by AssignRequestId (HTTP); console and queue work have none.
