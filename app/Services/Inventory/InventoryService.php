@@ -25,6 +25,7 @@ class InventoryService
 
     public function receive(StockLine $line, StockMovementType $type, Model $reference, User $actor, ?string $notes = null): StockMovement
     {
+        $this->assertPositive($line->quantity);
         if ($type->direction() !== 1) {
             throw new InventoryException('El tipo de movimiento no es una entrada');
         }
@@ -56,6 +57,8 @@ class InventoryService
 
     public function dispatch(StockLine $line, Model $reference, User $actor, ?string $notes = null): StockMovement
     {
+        $this->assertPositive($line->quantity);
+
         return DB::transaction(function () use ($line, $reference, $actor, $notes): StockMovement {
             $product = Product::query()->findOrFail($line->productId);
             $warehouse = Warehouse::query()->findOrFail($line->warehouseId);
@@ -82,6 +85,8 @@ class InventoryService
 
     public function returnStock(StockLine $line, Model $reference, User $actor, ?string $notes = null): StockMovement
     {
+        $this->assertPositive($line->quantity);
+
         return DB::transaction(function () use ($line, $reference, $actor, $notes): StockMovement {
             $product = Product::query()->findOrFail($line->productId);
             $lot = $this->resolveLot($product, $line, required: $product->tracks_lots);
@@ -102,6 +107,8 @@ class InventoryService
 
     public function reserve(Model $reservable, int $productId, int $warehouseId, string $quantity): StockReservation
     {
+        $this->assertPositive($quantity);
+
         return DB::transaction(function () use ($reservable, $productId, $warehouseId, $quantity): StockReservation {
             $product = Product::query()->findOrFail($productId);
             $warehouse = Warehouse::query()->findOrFail($warehouseId);
@@ -120,11 +127,21 @@ class InventoryService
     public function release(StockReservation $reservation, ?string $quantity = null): void
     {
         DB::transaction(function () use ($reservation, $quantity): void {
-            $qty = Decimal::qty($quantity ?? $reservation->quantity);
-            $balance = $this->balance($reservation->product_id, $reservation->warehouse_id, null, lock: true);
+            /** @var StockReservation $locked */
+            $locked = StockReservation::query()->whereKey($reservation->getKey())->lockForUpdate()->firstOrFail();
+            if ($locked->released_at !== null) {
+                throw new InventoryException('La reserva ya fue liberada');
+            }
+            $qty = Decimal::qty($quantity ?? $locked->quantity);
+            $this->assertPositive($qty);
+            if (Decimal::cmp($qty, $locked->quantity) > 0) {
+                throw new InventoryException("No se puede liberar {$qty}: la reserva tiene {$locked->quantity}");
+            }
+            $balance = $this->balance($locked->product_id, $locked->warehouse_id, null, lock: true);
             $balance->forceFill(['reserved_quantity' => Decimal::qty(Decimal::of($balance->reserved_quantity)->minus(Decimal::of($qty)))])->save();
-            $remaining = Decimal::qty(Decimal::of($reservation->quantity)->minus(Decimal::of($qty)));
-            $reservation->forceFill(['quantity' => $remaining, 'released_at' => Decimal::isZero($remaining) ? now() : null])->save();
+            $remaining = Decimal::qty(Decimal::of($locked->quantity)->minus(Decimal::of($qty)));
+            $locked->forceFill(['quantity' => $remaining, 'released_at' => Decimal::isZero($remaining) ? now() : null])->save();
+            $reservation->setRawAttributes($locked->getAttributes(), true);
         });
     }
 
@@ -208,5 +225,15 @@ class InventoryService
         ]);
 
         return $movement;
+    }
+
+    /**
+     * Rejects zero or negative quantities on the service API (forms validate too, but this API is the last line).
+     */
+    private function assertPositive(string $quantity): void
+    {
+        if (Decimal::cmp($quantity, '0') <= 0) {
+            throw new InventoryException('La cantidad debe ser mayor que cero');
+        }
     }
 }

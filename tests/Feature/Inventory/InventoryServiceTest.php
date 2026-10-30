@@ -94,3 +94,39 @@ test('movements are append-only and low stock and expiring lots are reported', f
     $this->svc->receive(new StockLine($l->id, $this->wh->id, '1', '1', null, 'X', now()->addDays(10)->toDateString()), StockMovementType::Initial, $this->actor, $this->actor);
     expect($this->svc->expiringLots(30))->toHaveCount(1)->and($this->svc->expiringLots(5))->toHaveCount(0);
 });
+
+test('service rejects zero and negative quantities', function () {
+    $p = Product::factory()->create(['sku' => 'N-1']);
+    expect(fn () => $this->svc->receive(new StockLine($p->id, $this->wh->id, '-5', '10'), StockMovementType::Receipt, $this->actor, $this->actor))
+        ->toThrow(InventoryException::class, 'La cantidad debe ser mayor que cero');
+    expect(fn () => $this->svc->dispatch(new StockLine($p->id, $this->wh->id, '0'), $this->actor, $this->actor))
+        ->toThrow(InventoryException::class, 'La cantidad debe ser mayor que cero');
+    expect(fn () => $this->svc->reserve($this->actor, $p->id, $this->wh->id, '-1'))
+        ->toThrow(InventoryException::class, 'La cantidad debe ser mayor que cero');
+    expect(StockMovement::count())->toBe(0);
+});
+
+test('a reservation cannot be released twice or beyond its quantity', function () {
+    $p = Product::factory()->create(['sku' => 'R-2']);
+    $this->svc->receive(new StockLine($p->id, $this->wh->id, '10', '5'), StockMovementType::Initial, $this->actor, $this->actor);
+    $res = $this->svc->reserve($this->actor, $p->id, $this->wh->id, '4');
+
+    expect(fn () => $this->svc->release($res, '5'))->toThrow(InventoryException::class, 'No se puede liberar 5.0000: la reserva tiene 4.0000');
+    $this->svc->release($res, '1');
+    expect($this->svc->available($p->id, $this->wh->id))->toBe('7.0000');
+    $this->svc->release($res);
+    expect($res->fresh()->released_at)->not->toBeNull()
+        ->and(fn () => $this->svc->release($res))->toThrow(InventoryException::class, 'La reserva ya fue liberada');
+    expect($this->svc->available($p->id, $this->wh->id))->toBe('10.0000');
+});
+
+test('dispatching a lot-tracked product requires a lot and enough stock in that lot', function () {
+    $p = Product::factory()->create(['sku' => 'L-9', 'tracks_lots' => true]);
+    $this->svc->receive(new StockLine($p->id, $this->wh->id, '3', '10', null, 'LOTE-A', now()->addYear()->toDateString()), StockMovementType::Initial, $this->actor, $this->actor);
+    $lot = Lot::where('product_id', $p->id)->where('code', 'LOTE-A')->firstOrFail();
+
+    expect(fn () => $this->svc->dispatch(new StockLine($p->id, $this->wh->id, '1'), $this->actor, $this->actor))
+        ->toThrow(InventoryException::class, 'El producto L-9 controla lotes: indica el lote a despachar');
+    expect(fn () => $this->svc->dispatch(new StockLine($p->id, $this->wh->id, '5', null, $lot->id), $this->actor, $this->actor))
+        ->toThrow(InventoryException::class);
+});
