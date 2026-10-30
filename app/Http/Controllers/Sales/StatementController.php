@@ -89,10 +89,14 @@ class StatementController extends Controller
         $user = $this->actor($request);
         $to = array_values($request->validated('to'));
         $cc = array_values($request->validated('cc') ?? []);
-        [$from, $asOf] = $this->defaultPeriod();
+        $request->validate(['period_from' => ['nullable', 'date'], 'period_to' => ['nullable', 'date', 'after_or_equal:period_from']]);
+        [$defaultFrom, $defaultTo] = $this->defaultPeriod();
+        $from = $request->string('period_from')->toString() !== '' ? CarbonImmutable::parse($request->string('period_from')->toString())->startOfDay() : $defaultFrom;
+        $asOf = $request->string('period_to')->toString() !== '' ? CarbonImmutable::parse($request->string('period_to')->toString())->startOfDay() : $defaultTo;
         $client->loadMissing('currency:id,code');
         $currencyCode = $client->currency->code;
-        $closing = $statements->statement($client, $from, $asOf)[$currencyCode]['closing_balance'] ?? '0.00';
+        $data = $this->pdfData($client, $from, $asOf, $statements, $user);
+        $closing = $data['statement'][$currencyCode]['closing_balance'] ?? '0.00';
 
         $vars = [
             'cliente' => $client->business_name,
@@ -105,7 +109,7 @@ class StatementController extends Controller
         $attachments = [[
             'name' => $fileName,
             'mime' => 'application/pdf',
-            'content' => $pdf->binary('pdf.sales.statement', $this->pdfData($client, $from, $asOf, $statements, $user), $fileName),
+            'content' => $pdf->binary('pdf.sales.statement', $data, $fileName),
         ]];
 
         $sendEmail->handle($user, $client, 'statement', $to, $cc, $vars, $attachments, $request->validated('body') ?: null, $request->validated('subject') ?: null);
@@ -148,7 +152,7 @@ class StatementController extends Controller
     /** @return array{0: CarbonImmutable, 1: CarbonImmutable} */
     private function period(Request $request): array
     {
-        $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date']]);
+        $request->validate(['from' => ['nullable', 'date'], 'to' => ['nullable', 'date', 'after_or_equal:from']]);
         [$defaultFrom, $defaultTo] = $this->defaultPeriod();
         $from = $request->string('from')->toString();
         $to = $request->string('to')->toString();
@@ -177,7 +181,7 @@ class StatementController extends Controller
             'from' => $from,
             'to' => $to,
             'statement' => $statements->statement($client, $from, $to),
-            'aging' => array_values(array_filter($statements->aging($viewer, $to)['rows'], fn (array $row) => $row['client_id'] === $client->id)),
+            'aging' => $statements->aging($viewer, $to, null, null, $client->id)['rows'],
         ];
     }
 

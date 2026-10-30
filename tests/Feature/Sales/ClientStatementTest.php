@@ -95,3 +95,17 @@ test('statement pdf and email use the statement template and the export is logge
     $this->get(route('sales.statements.export', ['format' => 'csv']))->assertOk();
     expect(Activity::inLog('exports')->where('event', 'exported')->latest('id')->first()->properties['table'])->toBe('aging');
 });
+
+test('the e-mailed statement uses the period chosen on screen', function () {
+    actingAsRole('owner', ['gmail_connected_at' => now(), 'gmail_email' => 'yo@empresa.test']);
+    Log::shouldReceive('channel')->andReturnSelf();
+    Log::shouldReceive('info');
+    $client = Client::factory()->create(['email' => 'cliente@x.test']);
+    issuedInvoice(['client_id' => $client->id]);
+    $this->post(route('sales.statements.send', [$client, 'period_from' => '2026-01-01', 'period_to' => '2026-01-31']), ['to' => ['cliente@x.test']])
+        ->assertRedirect()->assertSessionHas('success', 'Correo enviado a cliente@x.test');
+    expect(SentEmail::first()->template_key)->toBe('statement')
+        ->and(Activity::inLog('clients')->where('event', 'emailed')->where('subject_id', $client->id)->exists())->toBeTrue();
+    $this->post(route('sales.statements.send', [$client, 'period_from' => '2026-01-31', 'period_to' => '2026-01-01']), ['to' => ['cliente@x.test']])
+        ->assertSessionHasErrors(['period_to']);
+});

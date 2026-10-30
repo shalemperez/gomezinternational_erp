@@ -58,10 +58,11 @@ class ClientStatementService
      *
      * @return array{rows: list<array{client_id: int, client_code: string, client_name: string, salesperson: ?string, currency_code: string, current: string, d1_30: string, d31_60: string, d61_90: string, d90_plus: string, total: string, total_base: string}>, totals: array{current: string, d1_30: string, d61_90: string, d31_60: string, d90_plus: string, total: string, total_base: string}}
      */
-    public function aging(User $viewer, CarbonInterface $asOf, ?int $salespersonId = null, ?string $search = null): array
+    public function aging(User $viewer, CarbonInterface $asOf, ?int $salespersonId = null, ?string $search = null, ?int $clientId = null): array
     {
         $invoices = Invoice::query()
             ->whereIn('status', [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid])
+            ->when($clientId !== null, fn (Builder $query) => $query->where('client_id', $clientId))
             ->whereHas('client', fn (Builder $query) => $query->visibleTo($viewer)
                 ->when($salespersonId !== null, fn (Builder $q) => $q->where('salesperson_id', $salespersonId))
                 ->when($search !== null && $search !== '', fn (Builder $q) => $q->where(fn (Builder $s) => $s

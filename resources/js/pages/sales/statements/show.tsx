@@ -240,7 +240,12 @@ export default function StatementShow({
                     onOpenChange={setEmailOpen}
                     defaultTo={client.email ? [client.email] : []}
                     templateKey="statement"
-                    submitUrl={send.url(client.id)}
+                    submitUrl={send.url(client.id, {
+                        query: {
+                            period_from: filters.from,
+                            period_to: filters.to,
+                        },
+                    })}
                     attachmentsLabel={`estado-de-cuenta-${client.code}.pdf`}
                 />
             )}
