@@ -51,9 +51,12 @@ class DebitNoteController extends Controller
         }
         Gate::authorize('view', $invoice);
         $isDebitable = in_array($invoice->status, [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid, InvoiceStatus::Paid], true);
+        if (! $isDebitable) {
+            return redirect()->route('sales.invoices.show', $invoice)->with('error', 'La factura debe estar emitida.');
+        }
 
         return Inertia::render('sales/debit-notes/form', [
-            'invoice' => $isDebitable ? [...$invoice->toArray(), 'status_label' => $invoice->status->label()] : null,
+            'invoice' => [...$invoice->toArray(), 'status_label' => $invoice->status->label()],
             'reasons' => $this->reasonOptions(),
             'today' => now()->toDateString(),
         ]);

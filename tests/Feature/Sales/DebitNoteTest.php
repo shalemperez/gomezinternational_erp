@@ -65,3 +65,10 @@ test('paid invoices offer the debit note action', function () {
     $i->forceFill(['status' => 'paid', 'paid_amount' => $i->total, 'balance' => '0.00'])->save();
     $this->get(route('sales.invoices.show', $i))->assertOk()->assertInertia(fn ($p) => $p->where('can.debitNote', true)->where('can.creditNote', true));
 });
+
+test('the debit note form redirects for invoices that are not issued', function () {
+    actingAsRole('owner');
+    $i = issuedInvoice();
+    $i->forceFill(['status' => 'cancelled', 'cancelled_at' => now()])->save();
+    $this->get(route('sales.debit-notes.create', ['invoice' => $i->id]))->assertRedirect(route('sales.invoices.show', $i))->assertSessionHas('error', 'La factura debe estar emitida.');
+});
