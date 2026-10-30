@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\EcfProvider;
 use App\Contracts\GmailSender;
 use App\Listeners\LogAccessChanges;
 use App\Models\ActivityLog;
@@ -16,6 +17,7 @@ use App\Policies\DebitNotePolicy;
 use App\Policies\InvoicePolicy;
 use App\Policies\ProformaPolicy;
 use App\Policies\ReceiptPolicy;
+use App\Services\Ecf\EcfService;
 use App\Services\Mail\GoogleGmailSender;
 use App\Services\Mail\LogGmailSender;
 use App\Services\Settings;
@@ -41,6 +43,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(Settings::class);
+        $this->app->bind(EcfProvider::class, fn () => $this->app->make(EcfService::class)->provider());
         $this->app->bind(GmailSender::class, fn () => config('erp.gmail.driver') === 'google' ? $this->app->make(GoogleGmailSender::class) : $this->app->make(LogGmailSender::class));
     }
 

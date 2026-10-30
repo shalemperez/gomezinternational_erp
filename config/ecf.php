@@ -22,6 +22,9 @@ return [
     'token_ttl_minutes' => 50, // DGII tokens last 1 hour; refresh early
     'http_timeout_seconds' => 30,
     'rfce_threshold' => '250000.00',
+    'retry_backoff_minutes' => [1, 5, 15, 60, 120, 240, 480],
+    'poll_delay_seconds' => 30,
+    'max_attempts' => 48,
     'pending_alert_hours' => 24,
     'timezone' => 'America/Santo_Domingo',
     // Tabla IV "Codificación Unidad de Medida" by the ERP unit code; unknown codes use 'default' (43 = Unidad).

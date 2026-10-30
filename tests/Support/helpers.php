@@ -279,3 +279,34 @@ function signedEcfXml(EcfDocumentData $data): DOMDocument
 
     return $doc;
 }
+
+/**
+ * Points the e-CF provider, environment and fake outcome at the given values and creates an active sequence per
+ * traditional and electronic type when none exists yet. Keeps the fiscal mode unchanged (traditional NCF issuance).
+ */
+function ecfSettings(string $provider = 'fake', string $environment = 'test', string $outcome = 'accepted'): void
+{
+    $settings = app(Settings::class);
+    $settings->set('ecf.provider', $provider);
+    $settings->set('ecf.environment', $environment);
+    $settings->set('ecf.fake.outcome', $outcome);
+    companyFiscalSettings();
+
+    foreach (['B01', 'B02'] as $type) {
+        if (! NcfSequence::query()->where('ncf_type', $type)->where('is_active', true)->exists()) {
+            activeSequence($type, ['range_to' => 1000]);
+        }
+    }
+    foreach (['E31', 'E32', 'E33', 'E34', 'E44', 'E45'] as $type) {
+        if (! NcfSequence::query()->where('ncf_type', $type)->where('environment', $environment)->where('is_active', true)->exists()) {
+            activeSequence($type, ['environment' => $environment, 'range_to' => 10000000]);
+        }
+    }
+}
+
+/** ecfSettings() followed by the switch of the fiscal mode to 'ecf'. */
+function ecfMode(string $provider = 'fake', string $environment = 'test', string $outcome = 'accepted'): void
+{
+    ecfSettings($provider, $environment, $outcome);
+    app(Settings::class)->set('fiscal.mode', 'ecf');
+}
