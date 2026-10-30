@@ -93,6 +93,6 @@ test('the alanube webhook triggers a poll when the api key header matches', func
     Bus::fake([PollEcfStatus::class]);
     $this->postJson('/fe/alanube/webhook', ['id' => 'W1', 'status' => 'FINISHED'], ['x-api-key' => 'wrong'])->assertStatus(401);
     $this->postJson('/fe/alanube/webhook', ['id' => 'W1', 'status' => 'FINISHED'], ['x-api-key' => 'hook-key'])->assertOk()->assertJson(['ok' => true]);
-    Bus::assertDispatchedSync(PollEcfStatus::class, fn ($j) => $j->document->is($doc));
+    Bus::assertDispatched(PollEcfStatus::class, fn ($j) => $j->document->is($doc));
     expect(Activity::inLog('ecf_documents')->where('subject_id', $doc->id)->where('event', 'webhook_received')->exists())->toBeTrue();
 });

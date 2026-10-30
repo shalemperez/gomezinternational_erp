@@ -89,10 +89,9 @@ class EcfDocumentController extends Controller
             return back()->with('error', 'Solo se pueden reenviar e-CF pendientes de envío');
         }
 
-        SubmitEcfDocument::dispatchSync($ecfDocument);
-        $ecfDocument->refresh();
+        SubmitEcfDocument::dispatch($ecfDocument);
 
-        return back()->with('success', "Reenvío ejecutado: {$ecfDocument->status->label()}");
+        return back()->with('success', 'Reenvío en cola: el estado se actualizará en breve');
     }
 
     #[Middleware('permission:fiscal.ecf.manage')]
@@ -103,10 +102,9 @@ class EcfDocumentController extends Controller
             return back()->with('error', 'Solo se puede consultar el estado de e-CF enviados');
         }
 
-        PollEcfStatus::dispatchSync($ecfDocument);
-        $ecfDocument->refresh();
+        PollEcfStatus::dispatch($ecfDocument);
 
-        return back()->with('success', "Consulta ejecutada: {$ecfDocument->status->label()}");
+        return back()->with('success', 'Consulta en cola: el estado se actualizará en breve');
     }
 
     #[Middleware('permission:fiscal.ecf.view')]

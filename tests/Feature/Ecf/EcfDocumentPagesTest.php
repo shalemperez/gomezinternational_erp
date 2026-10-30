@@ -40,7 +40,7 @@ test('the show page exposes status, transmissions and history and the sales user
     $this->get(route('fiscal.ecf-documents.show', $doc))->assertForbidden();
 });
 
-test('retry and poll require the manage permission and run synchronously', function () {
+test('retry and poll require the manage permission and queue the job', function () {
     ecfMode(outcome: 'unavailable'); // the automatic submission fails → the document stays signed
     $invoice = issuedInvoice();
     $doc = $invoice->ecfDocument;
@@ -50,7 +50,7 @@ test('retry and poll require the manage permission and run synchronously', funct
     actingAsRole('accounting');
     $this->post(route('fiscal.ecf-documents.poll', $doc))->assertRedirect()->assertSessionHas('error', 'Solo se puede consultar el estado de e-CF enviados');
     app(Settings::class)->set('ecf.fake.outcome', 'in_process');
-    $this->post(route('fiscal.ecf-documents.retry', $doc))->assertRedirect()->assertSessionHas('success', 'Reenvío ejecutado: Aceptado'); // the sync queue runs the chained poll at once
+    $this->post(route('fiscal.ecf-documents.retry', $doc))->assertRedirect()->assertSessionHas('success', 'Reenvío en cola: el estado se actualizará en breve'); // the sync queue runs the chained poll at once
     expect($doc->fresh()->status)->toBe(EcfStatus::Accepted);
     $this->post(route('fiscal.ecf-documents.retry', $doc))->assertSessionHas('error', 'Solo se pueden reenviar e-CF pendientes de envío');
     $this->post(route('fiscal.ecf-documents.poll', $doc))->assertSessionHas('error', 'Solo se puede consultar el estado de e-CF enviados');
@@ -96,12 +96,12 @@ test('a transmission response is returned as json to users who can view the docu
     $this->get(route('fiscal.ecf-documents.transmission', [$doc, $transmission]))->assertOk()->assertJsonPath('response.fake', true)->assertJsonPath('http_status', 200);
 });
 
-test('poll on a sent e-cf runs synchronously and flashes the new status', function () {
+test('poll on a sent e-cf queues the status check', function () {
     ecfMode(outcome: 'unavailable');
     $doc = issuedInvoice()->ecfDocument;
     $doc->forceFill(['status' => EcfStatus::Sent, 'track_id' => 'TRACK-1'])->save();
     app(Settings::class)->set('ecf.fake.outcome', 'accepted');
     actingAsRole('accounting');
-    $this->post(route('fiscal.ecf-documents.poll', $doc))->assertRedirect()->assertSessionHas('success', 'Consulta ejecutada: Aceptado');
+    $this->post(route('fiscal.ecf-documents.poll', $doc))->assertRedirect()->assertSessionHas('success', 'Consulta en cola: el estado se actualizará en breve');
     expect($doc->fresh()->status)->toBe(EcfStatus::Accepted);
 });

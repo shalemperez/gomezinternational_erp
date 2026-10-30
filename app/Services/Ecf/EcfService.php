@@ -21,6 +21,7 @@ use App\Support\Ecf\EcfSubmissionResult;
 use App\Support\Fiscal\FiscalNumber;
 use App\Support\FiscalId;
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
 use Throwable;
 
@@ -91,15 +92,11 @@ class EcfService
     /**
      * The attempt is counted before the provider call so a failed call still counts (see recordFailure).
      *
-     * @throws EcfException when the document was already sent or the provider is unavailable
+     * @throws EcfException when the document was already sent or cancelled, or the provider is unavailable
      */
     public function submit(EcfDocument $ecfDocument): EcfDocument
     {
-        if (! in_array($ecfDocument->status, [EcfStatus::Pending, EcfStatus::Signed], true)) {
-            throw new EcfException("El e-CF {$ecfDocument->encf} ya fue enviado");
-        }
-
-        $ecfDocument->forceFill(['attempts' => $ecfDocument->attempts + 1, 'last_attempt_at' => now()])->save();
+        $this->claim($ecfDocument, [EcfStatus::Pending, EcfStatus::Signed]);
 
         $result = $this->provider()->submit($ecfDocument);
         $this->applyResult($ecfDocument, $result, $ecfDocument->isRfce() ? 'rfce' : 'send');
@@ -110,25 +107,84 @@ class EcfService
     /** @throws EcfException when the document is not waiting for a DGII result */
     public function poll(EcfDocument $ecfDocument): EcfDocument
     {
-        if (! in_array($ecfDocument->status, [EcfStatus::Sent, EcfStatus::InProcess], true)) {
-            throw new EcfException("El e-CF {$ecfDocument->encf} no está esperando resultado de la DGII");
-        }
+        $this->claim($ecfDocument, [EcfStatus::Sent, EcfStatus::InProcess]);
 
         $this->applyResult($ecfDocument, $this->provider()->poll($ecfDocument), 'poll');
 
         return $ecfDocument;
     }
 
+    /**
+     * Records the attempt under a row lock before any network call, so a concurrent cancel sees it (GC-23).
+     *
+     * @param  list<EcfStatus>  $allowed
+     *
+     * @throws EcfException when the document is not in one of the allowed statuses
+     */
+    private function claim(EcfDocument $ecfDocument, array $allowed): void
+    {
+        DB::transaction(function () use ($ecfDocument, $allowed): void {
+            $this->lockFresh($ecfDocument);
+
+            if (! in_array($ecfDocument->status, $allowed, true)) {
+                throw new EcfException(match (true) {
+                    $ecfDocument->status === EcfStatus::Cancelled => "El e-CF {$ecfDocument->encf} fue anulado antes del envío",
+                    in_array(EcfStatus::Pending, $allowed, true) => "El e-CF {$ecfDocument->encf} ya fue enviado",
+                    default => "El e-CF {$ecfDocument->encf} no está esperando resultado de la DGII",
+                });
+            }
+
+            $ecfDocument->forceFill([
+                'attempts' => $ecfDocument->attempts + 1,
+                'last_attempt_at' => now(),
+                'next_attempt_at' => now()->addMinutes((int) config('ecf.retry_backoff_minutes')[0]),
+            ])->save();
+        });
+    }
+
+    private function lockFresh(EcfDocument $ecfDocument): void
+    {
+        EcfDocument::query()->whereKey($ecfDocument->getKey())->lockForUpdate()->first();
+        $ecfDocument->refresh();
+    }
+
     public function applyResult(EcfDocument $ecfDocument, EcfSubmissionResult $result, string $kind): void
     {
-        $ecfDocument->transmissions()->create([
-            'kind' => $kind,
-            'environment' => $ecfDocument->environment,
-            'http_status' => $result->httpStatus,
-            'response' => $result->raw,
-            'succeeded' => true,
-        ]);
+        $applied = DB::transaction(function () use ($ecfDocument, $result, $kind): bool {
+            $this->lockFresh($ecfDocument);
 
+            $ecfDocument->transmissions()->create([
+                'kind' => $kind,
+                'environment' => $ecfDocument->environment,
+                'http_status' => $result->httpStatus,
+                'response' => $result->raw,
+                'succeeded' => true,
+            ]);
+
+            if ($ecfDocument->status->isFinal()) {
+                activity('ecf_documents')->performedOn($ecfDocument)->event('result_ignored')
+                    ->withProperties(['current' => $ecfDocument->status->value, 'received' => $result->status->value, 'kind' => $kind, 'track_id' => $result->trackId])
+                    ->log('Resultado ignorado: el e-CF ya tiene un estado final');
+
+                return false;
+            }
+
+            $this->storeResult($ecfDocument, $result);
+
+            return true;
+        });
+
+        if ($applied && $result->status === EcfStatus::Rejected) {
+            try {
+                Notification::send($this->alertRecipients(), new EcfRejected($ecfDocument));
+            } catch (Throwable $exception) {
+                report($exception);
+            }
+        }
+    }
+
+    private function storeResult(EcfDocument $ecfDocument, EcfSubmissionResult $result): void
+    {
         if ($result->signedXml !== null && $ecfDocument->xml_path === null) {
             $fileName = FiscalId::normalize((string) $this->settings->get('company.rnc', '')).$ecfDocument->encf.'.xml';
             $ecfDocument->xml_path = $this->storage->putNew($this->storage->documentDir($ecfDocument).'/'.$fileName, $result->signedXml);
@@ -159,14 +215,6 @@ class EcfService
             ->event($result->status === EcfStatus::InProcess ? 'polled' : $result->status->value)
             ->withProperties(['track_id' => $ecfDocument->track_id, 'code' => $result->code, 'messages' => $result->messages])
             ->log($result->status->label());
-
-        if ($result->status === EcfStatus::Rejected) {
-            try {
-                Notification::send($this->alertRecipients(), new EcfRejected($ecfDocument));
-            } catch (Throwable $exception) {
-                report($exception);
-            }
-        }
     }
 
     /**

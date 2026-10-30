@@ -23,12 +23,14 @@ use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Models\Salesperson;
 use App\Models\User;
+use App\Services\Ecf\EcfService;
 use App\Services\Inventory\InventoryService;
 use App\Services\Settings;
 use App\Support\Inventory\StockLine;
 use Database\Seeders\CurrencySeeder;
 use Database\Seeders\DocumentSequenceSeeder;
 use Illuminate\Support\Facades\Bus;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
 
@@ -122,4 +124,38 @@ test('the issue route flashes the e-ncf and the sales user still cannot cancel',
     }
     $this->post(route('sales.invoices.issue', $draft))->assertRedirect(route('sales.invoices.show', $draft))->assertSessionHas('success', "Factura {$draft->fresh()->number} emitida con e-NCF E310000000001");
     $this->post(route('sales.invoices.cancel', $draft), ['reason' => 'x'])->assertForbidden();
+});
+
+test('a stale document cancelled before the claim is never sent', function () {
+    ecfMode();
+    activeCertificate();
+    Bus::fake([SubmitEcfDocument::class]);
+    $invoice = issuedInvoice();
+    $stale = $invoice->ecfDocument; // still "signed" in memory
+    app(CancelInvoice::class)->handle($invoice->fresh(), User::factory()->create(), 'duplicada');
+    expect(fn () => app(EcfService::class)->submit($stale))->toThrow(EcfException::class, "El e-CF {$stale->encf} fue anulado antes del envío");
+    expect($stale->fresh()->status)->toBe(EcfStatus::Cancelled)->and($stale->fresh()->attempts)->toBe(0)->and($stale->transmissions()->count())->toBe(0);
+});
+
+test('a cancel landing during the dgii call is refused because the attempt was claimed first', function () {
+    ecfMode('dgii');
+    activeCertificate();
+    Bus::fake([SubmitEcfDocument::class]);
+    $invoice = issuedInvoice();
+    $cancelError = null;
+    $claimed = null;
+    Http::fake([...fakeDgiiAuth(), 'https://ecf.dgii.gov.do/testecf/recepcion/api/facturaselectronicas' => function () use ($invoice, &$cancelError, &$claimed) {
+        $claimed = EcfDocument::query()->where('document_id', $invoice->id)->firstOrFail();
+        try {
+            app(CancelInvoice::class)->handle($invoice->fresh(), User::factory()->create(), 'duplicada');
+        } catch (DocumentStateException $e) {
+            $cancelError = $e->getMessage();
+        }
+
+        return Http::response(['trackId' => 'TRK-C']);
+    }]);
+    $doc = app(EcfService::class)->submit($invoice->ecfDocument);
+    expect($cancelError)->toBe('Un e-CF ya enviado a la DGII no se puede anular; emite una nota de crédito que lo anule (código de modificación 1).')
+        ->and($claimed->attempts)->toBe(1)->and($claimed->next_attempt_at->isFuture())->toBeTrue()->and($claimed->last_attempt_at)->not->toBeNull()
+        ->and($doc->status)->toBe(EcfStatus::Sent)->and($invoice->fresh()->status)->toBe(InvoiceStatus::Issued);
 });

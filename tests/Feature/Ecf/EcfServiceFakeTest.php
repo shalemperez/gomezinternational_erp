@@ -5,15 +5,18 @@ use App\Enums\EcfStatus;
 use App\Enums\NcfType;
 use App\Exceptions\EcfException;
 use App\Models\Client;
+use App\Models\EcfDocument;
 use App\Models\NcfSequence;
 use App\Models\User;
 use App\Services\Ecf\EcfService;
 use App\Services\Ecf\EcfStorage;
 use App\Services\Ecf\Providers\FakeEcfProvider;
 use App\Services\Settings;
+use App\Support\Ecf\EcfSubmissionResult;
 use App\Support\Fiscal\FiscalNumber;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DocumentSequenceSeeder;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Spatie\Activitylog\Models\Activity;
 
@@ -109,4 +112,20 @@ test('without a certificate the fake provider signs with a pseudo signature and 
     expect($doc->status)->toBe(EcfStatus::Signed)->and(strlen($doc->security_code))->toBe(6)->and($doc->environment)->toBe(EcfEnvironment::Cert);
     app(Settings::class)->set('ecf.provider', 'nope');
     expect(fn () => app(EcfService::class)->provider())->toThrow(EcfException::class, 'Proveedor e-CF no soportado: nope');
+});
+
+test('a late result never overwrites a final or cancelled status', function () {
+    ecfSettings();
+    activeCertificate();
+    $service = app(EcfService::class);
+    $doc = $service->submit($service->create(issuedInvoice(), new FiscalNumber('E310000000005', NcfType::E31, CarbonImmutable::parse('2027-12-31'), NcfSequence::query()->where('ncf_type', 'E31')->value('id')), null));
+    expect($doc->status)->toBe(EcfStatus::Accepted);
+    Notification::fake();
+    $service->applyResult($doc, new EcfSubmissionResult(status: EcfStatus::Rejected, trackId: 'LATE-1', code: 2, messages: [['codigo' => '1', 'valor' => 'Duplicado']], raw: ['late' => true], sequenceUsed: true, httpStatus: 200), 'poll');
+    expect($doc->fresh()->status)->toBe(EcfStatus::Accepted)->and($doc->fresh()->rejected_at)->toBeNull()->and($doc->transmissions()->count())->toBe(2)
+        ->and(Activity::inLog('ecf_documents')->where('subject_id', $doc->id)->where('event', 'result_ignored')->exists())->toBeTrue();
+    Notification::assertNothingSent();
+    $cancelled = EcfDocument::factory()->create(['status' => 'cancelled', 'encf' => 'E310000000006']);
+    $service->applyResult($cancelled, new EcfSubmissionResult(status: EcfStatus::Accepted, trackId: 'LATE-2', code: 1, messages: [], raw: [], sequenceUsed: true, httpStatus: 200), 'send');
+    expect($cancelled->fresh()->status)->toBe(EcfStatus::Cancelled)->and($cancelled->fresh()->accepted_at)->toBeNull();
 });

@@ -4,6 +4,7 @@ use App\Enums\EcfStatus;
 use App\Enums\NcfType;
 use App\Exceptions\EcfCertificateException;
 use App\Exceptions\EcfException;
+use App\Jobs\SubmitEcfDocument;
 use App\Models\Client;
 use App\Models\EcfCertificate;
 use App\Models\EcfDocument;
@@ -143,4 +144,20 @@ test('a 400 answer is a rejection with the dgii message', function () {
     $service = app(EcfService::class);
     $doc = $service->submit($service->create(issuedInvoice(), new FiscalNumber('E310000000009', NcfType::E31, CarbonImmutable::parse('2027-12-31'), electronicSequenceId('E31')), null));
     expect($doc->status)->toBe(EcfStatus::Rejected)->and($doc->dgii_messages[0]['valor'])->toBe('Formato inválido');
+});
+
+test('a retry dispatched while the submission is running is dropped by the unique lock', function () {
+    $service = app(EcfService::class);
+    $doc = $service->create(issuedInvoice(), new FiscalNumber('E310000000010', NcfType::E31, CarbonImmutable::parse('2027-12-31'), electronicSequenceId('E31')), null);
+    Http::fake([...fakeDgiiAuth(),
+        'https://ecf.dgii.gov.do/testecf/recepcion/api/facturaselectronicas' => function () use ($doc) {
+            SubmitEcfDocument::dispatch(EcfDocument::query()->findOrFail($doc->id));
+
+            return Http::response(['trackId' => 'TRK-U']);
+        },
+        'https://ecf.dgii.gov.do/testecf/consultaresultado/api/consultas/estado?trackid=TRK-U' => Http::response(['trackId' => 'TRK-U', 'codigo' => 1, 'estado' => 'Aceptado', 'mensajes' => []]),
+    ]);
+    SubmitEcfDocument::dispatch($doc);
+    expect(Http::recorded(fn (Request $r) => str_contains($r->url(), '/recepcion/api/facturaselectronicas'))->count())->toBe(1)
+        ->and($doc->fresh()->status)->toBe(EcfStatus::Accepted)->and($doc->fresh()->attempts)->toBe(2); // submit claim + chained poll claim
 });

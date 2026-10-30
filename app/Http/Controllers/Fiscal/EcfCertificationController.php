@@ -85,9 +85,9 @@ class EcfCertificationController extends Controller
             ->whereIn('status', [EcfStatus::Pending, EcfStatus::Signed])
             ->oldest('created_at')->oldest('id')->limit(20)->get();
 
-        $documents->each(fn (EcfDocument $ecfDocument) => SubmitEcfDocument::dispatchSync($ecfDocument));
+        $documents->each(fn (EcfDocument $ecfDocument) => SubmitEcfDocument::dispatch($ecfDocument));
 
-        return back()->with('success', "{$documents->count()} e-CF reenviados");
+        return back()->with('success', "{$documents->count()} e-CF en cola para reenvío");
     }
 
     /** @return list<array{key: string, label: string, ok: bool, hint: string}> */

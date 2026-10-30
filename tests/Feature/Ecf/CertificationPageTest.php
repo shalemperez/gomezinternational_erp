@@ -44,7 +44,7 @@ test('resubmit sends the pending documents of the environment', function () {
     issuedInvoice();
     expect(EcfDocument::query()->where('status', 'signed')->count())->toBe(2);
     app(Settings::class)->set('ecf.fake.outcome', 'accepted');
-    $this->post(route('fiscal.certification.resubmit'))->assertRedirect()->assertSessionHas('success', '2 e-CF reenviados');
+    $this->post(route('fiscal.certification.resubmit'))->assertRedirect()->assertSessionHas('success', '2 e-CF en cola para reenvío');
     expect(EcfDocument::query()->where('status', 'accepted')->count())->toBe(2);
 });
 

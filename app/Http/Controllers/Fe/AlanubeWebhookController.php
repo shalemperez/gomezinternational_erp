@@ -34,7 +34,7 @@ class AlanubeWebhookController extends Controller
                 ->withProperties(['track_id' => $trackId])
                 ->log('Notificación de Alanube recibida');
 
-            PollEcfStatus::dispatchSync($document);
+            PollEcfStatus::dispatch($document);
         }
 
         return response()->json(['ok' => true]);
