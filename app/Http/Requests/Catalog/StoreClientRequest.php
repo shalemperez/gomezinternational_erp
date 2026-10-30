@@ -70,6 +70,7 @@ class StoreClientRequest extends FormRequest
             'contacts.*.position' => ['nullable', 'string', 'max:100'],
             'contacts.*.email' => ['nullable', 'email', 'max:255'],
             'contacts.*.phone' => ['nullable', 'string', 'max:30'],
+            'contacts.*.id' => ['nullable', 'integer'],
             'contacts.*.is_primary' => ['nullable', 'boolean'],
             'tax_id_override' => ['boolean'],
             'tax_id_override_reason' => ['nullable', 'string', 'max:255'],
@@ -80,15 +81,21 @@ class StoreClientRequest extends FormRequest
     /** @return array<string, string> */
     public function messages(): array
     {
-        return $this->taxIdMessages();
+        return array_merge($this->taxIdMessages(), [
+            'contacts.*.id.exists' => 'El contacto no pertenece a este registro.',
+        ]);
     }
 
     public function withValidator(Validator $validator): void
     {
         $this->addTaxIdValidation($validator, 'clients', $this->route('client'));
         $validator->after(function (Validator $v): void {
+            $primary = collect($this->array('contacts'))->filter(fn ($c) => filter_var($c['is_primary'] ?? false, FILTER_VALIDATE_BOOL))->count();
             if ($this->input('taxpayer_type') === 'juridica' && $this->input('tax_id_type') !== 'rnc') {
                 $v->errors()->add('tax_id_type', 'Una persona jurídica debe identificarse con RNC.');
+            }
+            if ($primary > 1) {
+                $v->errors()->add('contacts', 'Solo un contacto puede ser el principal.');
             }
         });
     }

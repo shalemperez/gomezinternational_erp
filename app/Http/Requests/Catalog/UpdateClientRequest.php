@@ -17,8 +17,11 @@ class UpdateClientRequest extends StoreClientRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
+        $client = $this->route('client');
+
         return array_merge(parent::rules(), [
             'code' => ['nullable', 'string', 'max:20', 'alpha_dash', Rule::unique('clients', 'code')->ignore($this->route('client'))],
+            'contacts.*.id' => ['nullable', 'integer', Rule::exists('client_contacts', 'id')->where('client_id', $client instanceof Client ? $client->getKey() : 0)],
         ]);
     }
 }

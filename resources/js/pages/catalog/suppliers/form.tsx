@@ -74,6 +74,7 @@ export default function SupplierForm({
             currency_id: String(supplier?.currency_id ?? ''),
             credit_days: String(supplier?.credit_days ?? 30),
             contacts: (supplier?.contacts ?? []).map((contact) => ({
+                id: contact.id ?? null,
                 name: contact.name,
                 position: contact.position,
                 email: contact.email,
@@ -111,6 +112,7 @@ export default function SupplierForm({
         setData('contacts', [
             ...data.contacts,
             {
+                id: null,
                 name: '',
                 position: null,
                 email: null,

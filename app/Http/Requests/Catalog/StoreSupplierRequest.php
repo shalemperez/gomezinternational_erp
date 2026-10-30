@@ -65,6 +65,7 @@ class StoreSupplierRequest extends FormRequest
             'contacts.*.position' => ['nullable', 'string', 'max:100'],
             'contacts.*.email' => ['nullable', 'email', 'max:255'],
             'contacts.*.phone' => ['nullable', 'string', 'max:30'],
+            'contacts.*.id' => ['nullable', 'integer'],
             'contacts.*.is_primary' => ['nullable', 'boolean'],
             'tax_id_override' => ['boolean'],
             'tax_id_override_reason' => ['nullable', 'string', 'max:255'],
@@ -75,7 +76,9 @@ class StoreSupplierRequest extends FormRequest
     /** @return array<string, string> */
     public function messages(): array
     {
-        return $this->taxIdMessages();
+        return array_merge($this->taxIdMessages(), [
+            'contacts.*.id.exists' => 'El contacto no pertenece a este registro.',
+        ]);
     }
 
     public function withValidator(Validator $validator): void
@@ -84,5 +87,11 @@ class StoreSupplierRequest extends FormRequest
         $taxId = (string) $this->input('tax_id');
         $this->merge(['tax_id_type' => strlen($taxId) === 11 ? 'cedula' : 'rnc']);
         $this->addTaxIdValidation($validator, 'suppliers', $this->route('supplier'), 'tax_id', 'tax_id_type', 'country_code');
+        $validator->after(function (Validator $v): void {
+            $primary = collect($this->array('contacts'))->filter(fn ($c) => filter_var($c['is_primary'] ?? false, FILTER_VALIDATE_BOOL))->count();
+            if ($primary > 1) {
+                $v->errors()->add('contacts', 'Solo un contacto puede ser el principal.');
+            }
+        });
     }
 }

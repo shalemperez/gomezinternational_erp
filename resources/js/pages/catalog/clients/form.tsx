@@ -98,6 +98,7 @@ export default function ClientForm({
             credit_days: String(client?.credit_days ?? 30),
             credit_limit: client?.credit_limit ?? '0',
             contacts: (client?.contacts ?? []).map((contact) => ({
+                id: contact.id ?? null,
                 name: contact.name,
                 position: contact.position,
                 email: contact.email,
@@ -121,6 +122,7 @@ export default function ClientForm({
         setData('contacts', [
             ...data.contacts,
             {
+                id: null,
                 name: '',
                 position: null,
                 email: null,

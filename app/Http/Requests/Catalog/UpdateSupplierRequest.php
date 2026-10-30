@@ -17,8 +17,11 @@ class UpdateSupplierRequest extends StoreSupplierRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
+        $supplier = $this->route('supplier');
+
         return array_merge(parent::rules(), [
             'code' => ['nullable', 'string', 'max:20', 'alpha_dash', Rule::unique('suppliers', 'code')->ignore($this->route('supplier'))],
+            'contacts.*.id' => ['nullable', 'integer', Rule::exists('supplier_contacts', 'id')->where('supplier_id', $supplier instanceof Supplier ? $supplier->getKey() : 0)],
         ]);
     }
 }

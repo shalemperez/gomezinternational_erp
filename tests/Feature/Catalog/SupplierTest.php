@@ -48,14 +48,17 @@ test('a supplier created without code gets PRV code from its id and an update wi
     expect($supplier->fresh()->code)->toBe('PRV-'.str_pad((string) $supplier->id, 5, '0', STR_PAD_LEFT));
 });
 
-test('contacts are replaced on update with audit rows', function () {
+test('supplier contacts are synced by id and only one can be primary', function () {
     actingAsRole('owner');
-    $this->post(route('catalog.suppliers.store'), validSupplierPayload(['contacts' => [['name' => 'Ana', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '1']]]));
+    $this->post(route('catalog.suppliers.store'), validSupplierPayload(['contacts' => [['name' => 'Ana', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '1'], ['name' => 'Beto', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '0']]]));
     $s = Supplier::latest('id')->firstOrFail();
-    $firstId = $s->contacts->first()->id;
-    $this->put(route('catalog.suppliers.update', $s), validSupplierPayload(['contacts' => [['name' => 'Beto', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '0']]]))->assertRedirect(route('catalog.suppliers.index'));
-    expect($s->fresh()->contacts->pluck('name')->all())->toBe(['Beto'])
-        ->and(Activity::inLog('supplier_contacts')->where('event', 'deleted')->where('subject_id', $firstId)->exists())->toBeTrue();
+    [$ana, $beto] = $s->contacts()->orderBy('id')->get()->all();
+    $this->put(route('catalog.suppliers.update', $s), validSupplierPayload(['contacts' => [['id' => $ana->id, 'name' => 'Ana M', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '1']]]))->assertRedirect(route('catalog.suppliers.index'));
+    expect($s->fresh()->contacts->pluck('name')->all())->toBe(['Ana M'])
+        ->and(Activity::inLog('supplier_contacts')->where('event', 'updated')->where('subject_id', $ana->id)->exists())->toBeTrue()
+        ->and(Activity::inLog('supplier_contacts')->where('event', 'deleted')->where('subject_id', $beto->id)->exists())->toBeTrue();
+    $this->put(route('catalog.suppliers.update', $s), validSupplierPayload(['contacts' => [['name' => 'A', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '1'], ['name' => 'B', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '1']]]))
+        ->assertSessionHasErrors(['contacts' => 'Solo un contacto puede ser el principal.']);
 });
 
 test('owner can force an invalid rnc with a reason and accounting cannot', function () {

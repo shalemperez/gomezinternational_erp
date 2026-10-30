@@ -76,7 +76,7 @@ export type PriceListProductRow = {
     price: string | null;
 };
 export type ClientContact = {
-    id?: number;
+    id?: number | null;
     name: string;
     position: string | null;
     email: string | null;

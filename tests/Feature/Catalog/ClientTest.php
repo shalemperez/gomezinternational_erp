@@ -1,6 +1,7 @@
 <?php
 
 use App\Models\Client;
+use App\Models\ClientContact;
 use App\Models\Salesperson;
 use Spatie\Activitylog\Models\Activity;
 
@@ -35,18 +36,41 @@ test('code is generated when blank', function () {
     expect(Client::latest('id')->first()->code)->toMatch('/^CLI-\d{5}$/');
 });
 
-test('contacts are saved and replaced on update with audit rows', function () {
+test('contacts are synced by id: updated, created and deleted with audit rows', function () {
     actingAsRole('owner');
-    $contacts = [['name' => 'Ana', 'position' => 'Compras', 'email' => 'ana@ejemplo.test', 'phone' => '', 'is_primary' => '1']];
-    $this->post(route('catalog.clients.store'), validClientPayload(['tax_id' => fakeRnc(), 'contacts' => $contacts]))->assertRedirect(route('catalog.clients.index'));
+    $this->post(route('catalog.clients.store'), validClientPayload(['tax_id' => fakeRnc(), 'contacts' => [
+        ['name' => 'Ana', 'position' => 'Compras', 'email' => 'ana@ejemplo.test', 'phone' => '', 'is_primary' => '1'],
+        ['name' => 'Beto', 'position' => '', 'email' => '', 'phone' => '809-1', 'is_primary' => '0'],
+    ]]))->assertRedirect(route('catalog.clients.index'));
     $client = Client::latest('id')->firstOrFail();
-    expect($client->contacts)->toHaveCount(1)->and($client->contacts->first()->is_primary)->toBeTrue();
-    $firstId = $client->contacts->first()->id;
+    [$ana, $beto] = $client->contacts()->orderBy('id')->get()->all();
 
-    $this->put(route('catalog.clients.update', $client), validClientPayload(['tax_id' => $client->tax_id, 'contacts' => [['name' => 'Beto', 'position' => '', 'email' => '', 'phone' => '809-1', 'is_primary' => '0']]]))->assertRedirect(route('catalog.clients.index'));
-    expect($client->fresh()->contacts->pluck('name')->all())->toBe(['Beto'])
-        ->and(Activity::inLog('client_contacts')->where('event', 'deleted')->where('subject_id', $firstId)->exists())->toBeTrue()
-        ->and(Activity::inLog('client_contacts')->where('event', 'created')->count())->toBe(2);
+    $this->put(route('catalog.clients.update', $client), validClientPayload(['tax_id' => $client->tax_id, 'contacts' => [
+        ['id' => $ana->id, 'name' => 'Ana María', 'position' => 'Compras', 'email' => 'ana@ejemplo.test', 'phone' => '', 'is_primary' => '1'],
+        ['name' => 'Carla', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '0'],
+    ]]))->assertRedirect(route('catalog.clients.index'));
+
+    expect($client->fresh()->contacts()->orderBy('id')->pluck('name')->all())->toBe(['Ana María', 'Carla'])
+        ->and(ClientContact::query()->whereKey($ana->id)->exists())->toBeTrue()
+        ->and(Activity::inLog('client_contacts')->where('event', 'updated')->where('subject_id', $ana->id)->exists())->toBeTrue()
+        ->and(Activity::inLog('client_contacts')->where('event', 'deleted')->where('subject_id', $beto->id)->exists())->toBeTrue()
+        ->and(Activity::inLog('client_contacts')->where('event', 'created')->count())->toBe(3)
+        ->and(Activity::inLog('client_contacts')->where('event', 'deleted')->count())->toBe(1);
+});
+
+test('at most one contact can be primary and foreign contact ids are rejected', function () {
+    actingAsRole('owner');
+    $this->post(route('catalog.clients.store'), validClientPayload(['tax_id' => fakeRnc(), 'contacts' => [
+        ['name' => 'A', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '1'],
+        ['name' => 'B', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '1'],
+    ]]))->assertSessionHasErrors(['contacts' => 'Solo un contacto puede ser el principal.']);
+
+    $other = Client::factory()->create();
+    $foreign = ClientContact::factory()->create(['client_id' => $other->id]);
+    $mine = Client::factory()->create();
+    $this->put(route('catalog.clients.update', $mine), validClientPayload(['tax_id' => $mine->tax_id, 'contacts' => [['id' => $foreign->id, 'name' => 'X', 'position' => '', 'email' => '', 'phone' => '', 'is_primary' => '0']]]))
+        ->assertSessionHasErrors(['contacts.0.id']);
+    expect($foreign->fresh()->client_id)->toBe($other->id);
 });
 
 test('sales user sees and edits only own clients and new clients are assigned to them', function () {
