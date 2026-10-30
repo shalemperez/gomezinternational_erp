@@ -101,14 +101,7 @@ export type Proforma = DocumentTotals & {
     rejected_at: string | null;
     rejection_note: string | null;
     invoiced_at: string | null;
-    client?: {
-        id: number;
-        business_name: string;
-        trade_name: string | null;
-        formatted_tax_id: string | null;
-        address: string | null;
-        email: string | null;
-    };
+    client?: PickedClient;
     salesperson?: { id: number; name: string };
     currency?: { id: number; code: string };
     approver?: { id: number; name: string } | null;

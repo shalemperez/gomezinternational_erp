@@ -172,3 +172,15 @@ test('index filters by status and export is logged and scoped', function () {
     $this->get(route('sales.proformas.export', ['format' => 'csv']))->assertOk();
     expect(Activity::inLog('exports')->where('event', 'exported')->latest('id')->first()->properties['row_count'])->toBe(2);
 });
+
+test('users without view-all cannot edit, update, delete or duplicate another salesperson\'s proforma', function () {
+    salesUserWithSalesperson();
+    $foreign = Proforma::factory()->create();
+
+    $this->get(route('sales.proformas.edit', $foreign))->assertForbidden();
+    $this->put(route('sales.proformas.update', $foreign), validProformaPayload())->assertForbidden();
+    $this->delete(route('sales.proformas.destroy', $foreign))->assertForbidden();
+    $this->post(route('sales.proformas.duplicate', $foreign))->assertForbidden();
+    expect(Proforma::query()->whereKey($foreign->id)->exists())->toBeTrue()
+        ->and(Proforma::count())->toBe(1);
+});

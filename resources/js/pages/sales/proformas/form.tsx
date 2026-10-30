@@ -1,5 +1,5 @@
 import { Head, Link, useForm } from '@inertiajs/react';
-import type { FormEvent } from 'react';
+import { type FormEvent, useState } from 'react';
 import { ClientPicker } from '@/components/erp/client-picker';
 import { DocumentLinesEditor } from '@/components/erp/document-lines-editor';
 import { FormField } from '@/components/erp/form-field';
@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { useTotalsPreview } from '@/hooks/use-totals-preview';
-import { create, index, store, update } from '@/routes/sales/proformas';
+import { index, show, store, update } from '@/routes/sales/proformas';
 import type { DocumentLineInput, PickedClient, Proforma } from '@/types/sales';
 
 type Props = {
@@ -83,7 +83,12 @@ export default function ProformaForm({
         'DOP';
     const currency = currencyCode === 'USD' ? 'USD' : 'DOP';
 
+    const [selectedClient, setSelectedClient] = useState<PickedClient | null>(
+        proforma?.client ?? null,
+    );
+
     const pickClient = (client: PickedClient) => {
+        setSelectedClient(client);
         setData((current) => ({
             ...current,
             client_id: client.id,
@@ -112,14 +117,6 @@ export default function ProformaForm({
             post(store.url());
         }
     };
-
-    const selectedClient: PickedClient | null = proforma?.client
-        ? ({
-              id: proforma.client.id,
-              business_name: proforma.client.business_name,
-              formatted_tax_id: proforma.client.formatted_tax_id,
-          } as PickedClient)
-        : null;
 
     const title = proforma ? `Editar ${proforma.number}` : 'Nueva proforma';
 
@@ -262,7 +259,7 @@ export default function ProformaForm({
                         Guardar proforma
                     </Button>
                     <Button type="button" variant="outline" asChild>
-                        <Link href={proforma ? index() : create()}>
+                        <Link href={proforma ? show(proforma.id) : index()}>
                             Cancelar
                         </Link>
                     </Button>

@@ -284,18 +284,23 @@ class ProformaController extends Controller
     /** @return array<string, mixed> */
     private function proformaProps(Proforma $proforma): array
     {
-        $proforma->loadMissing(['client', 'salesperson:id,name', 'currency:id,code', 'approver:id,name', 'lines.product:id,sku,name']);
+        $proforma->loadMissing(['client.currency:id,code', 'salesperson:id,name', 'currency:id,code', 'approver:id,name', 'lines.product:id,sku,name']);
 
         return [
             ...$proforma->toArray(),
             'status_label' => $proforma->status->label(),
             'client' => [
                 'id' => $proforma->client->id,
+                'code' => $proforma->client->code,
                 'business_name' => $proforma->client->business_name,
                 'trade_name' => $proforma->client->trade_name,
+                'tax_id' => $proforma->client->tax_id,
                 'formatted_tax_id' => $proforma->client->getAttribute('formatted_tax_id'),
-                'address' => $proforma->client->address,
+                'currency_code' => $proforma->client->currency?->code,
+                'price_list_id' => $proforma->client->price_list_id,
+                'credit_days' => $proforma->client->credit_days,
                 'email' => $proforma->client->email,
+                'salesperson_id' => $proforma->client->salesperson_id,
             ],
         ];
     }

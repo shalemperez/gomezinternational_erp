@@ -15,7 +15,9 @@ class StoreProformaRequest extends FormRequest
 
     public function authorize(): bool
     {
-        return true; // permission enforced by controller middleware
+        $proforma = $this->route('proforma');
+
+        return $proforma === null || ($this->user()?->can('update', $proforma) ?? false);
     }
 
     protected function prepareForValidation(): void
