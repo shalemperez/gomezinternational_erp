@@ -25,6 +25,7 @@ Route::middleware(['auth'])->prefix('sales')->name('sales.')->group(function () 
 
     Route::get('credit-notes/export', [CreditNoteController::class, 'export'])->name('credit-notes.export');
     Route::get('credit-notes/{creditNote}/pdf', [CreditNoteController::class, 'pdf'])->name('credit-notes.pdf');
+    Route::post('credit-notes/{creditNote}/apply', [CreditNoteController::class, 'apply'])->name('credit-notes.apply');
     Route::resource('credit-notes', CreditNoteController::class)->only(['index', 'create', 'store', 'show'])->parameters(['credit-notes' => 'creditNote']);
 
     Route::get('debit-notes/export', [DebitNoteController::class, 'export'])->name('debit-notes.export');

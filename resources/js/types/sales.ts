@@ -203,6 +203,8 @@ export type CreditNote = DocumentTotals & {
     issue_date: string;
     reason: string;
     reason_label: string;
+    applied_amount: string;
+    unapplied_amount: string;
     returned_cost?: string;
     notes: string | null;
     issued_at: string | null;
@@ -285,10 +287,12 @@ export type OpenInvoiceRow = {
 };
 export type ReceiptApplication = {
     id: number;
-    receipt_id: number;
+    receipt_id: number | null;
+    credit_note_id: number | null;
     invoice_id: number;
     amount: string;
     source: string;
+    applied_on: string;
     invoice?: {
         id: number;
         number: string;

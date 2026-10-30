@@ -15,7 +15,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDate, formatMoney } from '@/lib/format';
-import { cancel, index, pdf } from '@/routes/sales/receipts';
+import { apply, cancel, index, pdf } from '@/routes/sales/receipts';
 import type { AuditEntry } from '@/types/audit';
 import type { OpenInvoiceRow, Receipt } from '@/types/sales';
 
@@ -201,7 +201,7 @@ export default function ReceiptShow({
                 <ApplyAdvanceDialog
                     open={applyOpen}
                     onOpenChange={setApplyOpen}
-                    receiptId={receipt.id}
+                    applyUrl={apply.url(receipt.id)}
                     currency={currency}
                     unappliedAmount={receipt.unapplied_amount}
                     openInvoices={openInvoices}

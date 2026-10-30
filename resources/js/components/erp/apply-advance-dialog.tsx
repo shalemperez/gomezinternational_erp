@@ -18,13 +18,13 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { formatDate, formatMoney } from '@/lib/format';
-import { apply } from '@/routes/sales/receipts';
 import type { OpenInvoiceRow } from '@/types/sales';
 
 type Props = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    receiptId: number;
+    applyUrl: string;
+    title?: string;
     currency: 'DOP' | 'USD';
     unappliedAmount: string;
     openInvoices: OpenInvoiceRow[];
@@ -33,7 +33,8 @@ type Props = {
 export function ApplyAdvanceDialog({
     open,
     onOpenChange,
-    receiptId,
+    applyUrl,
+    title,
     currency,
     unappliedAmount,
     openInvoices,
@@ -55,7 +56,7 @@ export function ApplyAdvanceDialog({
     const submit = () => {
         setProcessing(true);
         router.post(
-            apply.url(receiptId),
+            applyUrl,
             { applications },
             {
                 preserveScroll: true,
@@ -72,11 +73,10 @@ export function ApplyAdvanceDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="max-w-2xl">
                 <DialogHeader>
-                    <DialogTitle>Aplicar anticipo</DialogTitle>
+                    <DialogTitle>{title ?? 'Aplicar anticipo'}</DialogTitle>
                 </DialogHeader>
                 <p className="text-sm text-muted-foreground">
-                    Anticipo disponible:{' '}
-                    {formatMoney(unappliedAmount, currency)}
+                    Disponible: {formatMoney(unappliedAmount, currency)}
                 </p>
                 <div className="max-h-96 overflow-y-auto rounded-md border">
                     <Table>

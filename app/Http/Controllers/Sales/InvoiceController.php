@@ -18,11 +18,13 @@ use App\Http\Requests\Sales\InvoiceFromProformaRequest;
 use App\Http\Requests\Sales\IssueInvoiceRequest;
 use App\Http\Requests\Sales\SendDocumentEmailRequest;
 use App\Http\Requests\Sales\StoreInvoiceRequest;
+use App\Models\CreditNote;
 use App\Models\Currency;
 use App\Models\Dispatch;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Proforma;
+use App\Models\Receipt;
 use App\Models\ReceiptApplication;
 use App\Models\Salesperson;
 use App\Models\SentEmail;
@@ -356,12 +358,13 @@ class InvoiceController extends Controller
     /** @return array<int, array<string, mixed>> */
     private function applicationRows(Invoice $invoice): array
     {
-        return ReceiptApplication::query()->where('invoice_id', $invoice->id)->with('receipt:id,number,receipt_date')->orderByDesc('id')->get()
+        return ReceiptApplication::query()->where('invoice_id', $invoice->id)->with(['receipt:id,number,receipt_date', 'creditNote:id,number'])->orderByDesc('id')->get()
             ->map(fn (ReceiptApplication $application) => [
                 'id' => $application->id,
                 'receipt_id' => $application->receipt_id,
-                'receipt_number' => $application->receipt->number,
-                'receipt_date' => $application->receipt->receipt_date->toDateString(),
+                'credit_note_id' => $application->credit_note_id,
+                'receipt_number' => $application->receipt instanceof Receipt ? $application->receipt->number : ($application->creditNote instanceof CreditNote ? $application->creditNote->number : ''),
+                'receipt_date' => ($application->receipt instanceof Receipt ? $application->receipt->receipt_date : $application->applied_on)->toDateString(),
                 'amount' => $application->amount,
                 'source' => $application->source,
             ])->values()->all();

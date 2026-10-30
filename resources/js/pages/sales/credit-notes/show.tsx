@@ -1,4 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
+import { useState } from 'react';
+import { ApplyAdvanceDialog } from '@/components/erp/apply-advance-dialog';
 import { DocumentHeader } from '@/components/erp/document-header';
 import { RecordHistory } from '@/components/erp/record-history';
 import { Button } from '@/components/ui/button';
@@ -12,17 +14,27 @@ import {
     TableRow,
 } from '@/components/ui/table';
 import { formatDate, formatMoney, formatNumber } from '@/lib/format';
-import { index, pdf } from '@/routes/sales/credit-notes';
+import { apply, index, pdf } from '@/routes/sales/credit-notes';
 import { show as showInvoice } from '@/routes/sales/invoices';
 import type { AuditEntry } from '@/types/audit';
-import type { CreditNote } from '@/types/sales';
+import type { CreditNote, OpenInvoiceRow } from '@/types/sales';
 
 type Props = {
     creditNote: CreditNote;
     history: AuditEntry[];
+    openInvoices: OpenInvoiceRow[];
+    can: {
+        apply: boolean;
+    };
 };
 
-export default function CreditNoteShow({ creditNote, history }: Props) {
+export default function CreditNoteShow({
+    creditNote,
+    history,
+    openInvoices,
+    can: abilities,
+}: Props) {
+    const [applyOpen, setApplyOpen] = useState(false);
     const currency = creditNote.currency?.code === 'USD' ? 'USD' : 'DOP';
 
     const meta = [
@@ -47,6 +59,14 @@ export default function CreditNoteShow({ creditNote, history }: Props) {
         { label: 'Motivo', value: creditNote.reason_label },
         { label: 'Moneda', value: creditNote.currency?.code ?? '' },
         { label: 'Total', value: formatMoney(creditNote.total, currency) },
+        {
+            label: 'Aplicado a la factura',
+            value: formatMoney(creditNote.applied_amount, currency),
+        },
+        {
+            label: 'Saldo a favor',
+            value: formatMoney(creditNote.unapplied_amount, currency),
+        },
     ];
 
     return (
@@ -60,17 +80,39 @@ export default function CreditNoteShow({ creditNote, history }: Props) {
                     statusLabel="Emitida"
                     meta={meta}
                     actions={
-                        <Button variant="outline" asChild>
-                            <a
-                                href={pdf.url(creditNote.id)}
-                                target="_blank"
-                                rel="noreferrer"
-                            >
-                                PDF
-                            </a>
-                        </Button>
+                        <>
+                            <Button variant="outline" asChild>
+                                <a
+                                    href={pdf.url(creditNote.id)}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                >
+                                    PDF
+                                </a>
+                            </Button>
+                            {abilities.apply && (
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setApplyOpen(true)}
+                                >
+                                    Aplicar saldo a favor
+                                </Button>
+                            )}
+                        </>
                     }
                 />
+
+                {abilities.apply && (
+                    <ApplyAdvanceDialog
+                        open={applyOpen}
+                        onOpenChange={setApplyOpen}
+                        applyUrl={apply.url(creditNote.id)}
+                        title="Aplicar saldo a favor"
+                        currency={currency}
+                        unappliedAmount={creditNote.unapplied_amount}
+                        openInvoices={openInvoices}
+                    />
+                )}
 
                 <Tabs defaultValue="lineas">
                     <TabsList>

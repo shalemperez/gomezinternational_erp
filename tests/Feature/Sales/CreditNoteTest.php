@@ -11,10 +11,14 @@ use App\Models\DebitNote;
 use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Models\Product;
+use App\Models\ReceiptApplication;
 use App\Models\StockBalance;
 use App\Models\StockMovement;
 use App\Services\Inventory\InventoryService;
+use App\Services\Sales\ClientAccount;
+use App\Services\Sales\ClientStatementService;
 use App\Support\Inventory\StockLine;
+use Carbon\CarbonImmutable;
 use Database\Seeders\CurrencySeeder;
 use Database\Seeders\DocumentSequenceSeeder;
 use Spatie\Activitylog\Models\Activity;
@@ -42,16 +46,55 @@ test('a discount credit note is issued with B04, reduces the invoice balance and
     expect(fn () => $n->update(['notes' => 'x']))->toThrow(ImmutableDocumentException::class);
 });
 
-test('a credit note cannot exceed the invoice balance nor the invoiced unit price', function () {
+test('a credit note is capped by the creditable amount and the excess over the balance becomes client credit', function () {
     actingAsRole('accounting');
     $i = issuedInvoice();
     $i->forceFill(['paid_amount' => '200.00'])->save();
     $i->refreshFinancials(); // balance 36.00
-    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [['invoice_line_id' => $i->lines->first()->id, 'product_id' => $i->lines->first()->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => '']]]))
-        ->assertRedirect()->assertSessionHas('error', 'La nota de crédito (RD$ 118.00) supera el saldo pendiente de la factura (RD$ 36.00).');
-    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [['invoice_line_id' => $i->lines->first()->id, 'product_id' => $i->lines->first()->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100.5', 'discount_percent' => '0', 'lot_id' => '']]]))
+    $line = $i->lines->first();
+    $row = fn (string $qty, string $price) => ['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => $qty, 'unit_price' => $price, 'discount_percent' => '0', 'lot_id' => ''];
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [$row('1', '100.5')]]))
         ->assertSessionHasErrors(['lines.0.unit_price' => 'La nota no puede superar el precio facturado (100.0000).']);
-    expect(CreditNote::count())->toBe(0)->and(NcfSequence::where('ncf_type', 'B04')->first()->next_number)->toBe(1);
+
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [$row('1', '100')]]))->assertRedirect()->assertSessionHas('success'); // 118.00 > balance 36.00
+    $n = CreditNote::firstOrFail();
+    expect($n->total)->toBe('118.00')->and($n->applied_amount)->toBe('36.00')->and($n->unapplied_amount)->toBe('82.00')
+        ->and($i->fresh()->credited_amount)->toBe('36.00')->and($i->fresh()->balance)->toBe('0.00')->and($i->fresh()->status)->toBe(InvoiceStatus::Paid)
+        ->and(ClientAccount::advanceBalance($i->client, $i->currency))->toBe('82.00')
+        ->and(AccountingEvent::where('type', 'credit_note_issued')->first()->payload['unapplied_amount'])->toBe('82.00');
+
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['lines' => [$row('2', '100')]]))
+        ->assertRedirect()->assertSessionHas('error', 'La nota de crédito (RD$ 236.00) supera el monto acreditable de la factura (RD$ 118.00).');
+    expect(CreditNote::count())->toBe(1)->and(NcfSequence::where('ncf_type', 'B04')->first()->next_number)->toBe(2);
+});
+
+test('client credit from a credit note is applied to another open invoice and excluded from the statement payments', function () {
+    $user = actingAsRole('accounting');
+    $a = issuedInvoice();
+    $a->forceFill(['paid_amount' => '200.00'])->save();
+    $a->refreshFinancials();
+    $line = $a->lines->first();
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($a, ['lines' => [['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => '']]]))->assertRedirect();
+    $n = CreditNote::firstOrFail(); // unapplied 82.00
+    $b = issuedInvoice(['client_id' => $a->client_id]); // 236.00
+
+    $this->get(route('sales.credit-notes.show', $n))->assertOk()->assertInertia(fn ($p) => $p->where('can.apply', true)->has('openInvoices', 1)->where('creditNote.unapplied_amount', '82.00'));
+    $this->post(route('sales.credit-notes.apply', $n), ['applications' => [['invoice_id' => $b->id, 'amount' => '100']]])
+        ->assertSessionHasErrors(['applications' => 'Las aplicaciones (100.00) superan el saldo a favor disponible (82.00).']);
+    $this->post(route('sales.credit-notes.apply', $n), ['applications' => [['invoice_id' => $b->id, 'amount' => '82']]])
+        ->assertRedirect()->assertSessionHas('success', 'Saldo a favor aplicado: RD$ 82.00');
+    $application = ReceiptApplication::where('source', 'credit_note')->firstOrFail();
+    expect($n->fresh()->unapplied_amount)->toBe('0.00')->and($b->fresh()->paid_amount)->toBe('82.00')->and($b->fresh()->balance)->toBe('154.00')
+        ->and($application->receipt_id)->toBeNull()->and($application->credit_note_id)->toBe($n->id)->and($application->applied_on->toDateString())->toBe(now()->toDateString())
+        ->and(AccountingEvent::where('type', 'credit_note_applied')->first()->payload['applied_total'])->toBe('82.00')
+        ->and(Activity::inLog('credit_notes')->where('event', 'credit_applied')->where('causer_id', $user->id)->exists())->toBeTrue()
+        ->and(Activity::inLog('invoices')->where('event', 'payment_applied')->where('subject_id', $b->id)->exists())->toBeTrue();
+    $this->post(route('sales.credit-notes.apply', $n), ['applications' => [['invoice_id' => $b->id, 'amount' => '1']]])->assertSessionHas('error', 'La nota de crédito no tiene saldo a favor disponible');
+
+    $rows = app(ClientStatementService::class)->statement($a->client, CarbonImmutable::parse('2020-01-01'), CarbonImmutable::parse('2030-12-31'))['DOP']['rows'];
+    expect(collect($rows)->where('type', 'payment')->count())->toBe(0)->and(collect($rows)->where('type', 'credit_note')->count())->toBe(1)
+        ->and(end($rows)['balance'])->toBe('354.00'); // 236 + 236 − 118 (the 200 paid_amount above has no receipt)
+    $this->get(route('sales.invoices.show', $b))->assertOk()->assertInertia(fn ($p) => $p->where('applications.0.receipt_number', $n->number)->where('applications.0.source', 'credit_note'));
 });
 
 test('a return cannot exceed the dispatched quantity and re-enters stock at the dispatch cost', function () {

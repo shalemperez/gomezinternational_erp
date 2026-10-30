@@ -64,11 +64,15 @@ class IssueCreditNote
 
             $computed = $this->calculator->compute(array_map(fn (array $item) => $item['input'], $resolved));
             $totals = DocumentLines::totals($computed, $invoice->exchange_rate);
-            if (Decimal::cmp($totals['total'], $invoice->balance) > 0) {
+            $issuedTotals = Decimal::money((string) CreditNote::query()->where('invoice_id', $invoice->id)->where('status', 'issued')->sum('total'));
+            $creditable = Decimal::money(Decimal::of($invoice->total)->plus(Decimal::of($invoice->debited_amount))->minus(Decimal::of($issuedTotals)));
+            if (Decimal::cmp($totals['total'], $creditable) > 0) {
                 $currency = $invoice->currency->code;
 
-                throw new DocumentStateException('La nota de crédito ('.DocumentPdf::money($totals['total'], $currency).') supera el saldo pendiente de la factura ('.DocumentPdf::money($invoice->balance, $currency).').');
+                throw new DocumentStateException('La nota de crédito ('.DocumentPdf::money($totals['total'], $currency).') supera el monto acreditable de la factura ('.DocumentPdf::money($creditable, $currency).').');
             }
+            $applied = Decimal::cmp($totals['total'], $invoice->balance) > 0 ? Decimal::money($invoice->balance) : $totals['total'];
+            $unapplied = Decimal::money(Decimal::of($totals['total'])->minus(Decimal::of($applied)));
 
             $warehouseId = self::nullableInt($data['warehouse_id'] ?? null) ?? $invoice->warehouse_id;
             $issueDate = CarbonImmutable::today();
@@ -90,6 +94,8 @@ class IssueCreditNote
                 'issue_date' => $issueDate->toDateString(),
                 'reason' => $reason,
                 ...$totals,
+                'applied_amount' => $applied,
+                'unapplied_amount' => $unapplied,
                 'notes' => $data['notes'] ?? null,
                 'created_by' => $actor->id,
             ]);
@@ -121,14 +127,14 @@ class IssueCreditNote
             }
 
             $note->forceFill(['status' => 'issued', 'returned_cost' => $returnedCost, 'issued_at' => now()])->save();
-            $invoice->forceFill(['credited_amount' => Decimal::sum([$invoice->credited_amount, $totals['total']])])->save();
+            $invoice->forceFill(['credited_amount' => Decimal::sum([$invoice->credited_amount, $applied])])->save();
             $invoice->refreshFinancials();
 
             activity('credit_notes')->causedBy($actor)->performedOn($note)->event('issued')
                 ->withProperties(['number' => $note->number, 'ncf' => $note->ncf, 'reason' => $reason->value, 'total' => $note->total])
                 ->log("Nota de crédito {$note->number} emitida con NCF {$note->ncf}");
             activity('invoices')->causedBy($actor)->performedOn($invoice)->event('credit_note_applied')
-                ->withProperties(['credit_note_id' => $note->id, 'total' => $note->total])
+                ->withProperties(['credit_note_id' => $note->id, 'total' => $note->total, 'applied_amount' => $applied, 'unapplied_amount' => $unapplied])
                 ->log("Nota de crédito {$note->number} aplicada a la factura {$invoice->number}");
 
             $this->events->record('credit_note_issued', $note, [
@@ -138,7 +144,7 @@ class IssueCreditNote
                 'subtotal' => $note->subtotal, 'discount_total' => $note->discount_total, 'taxable_total' => $note->taxable_total,
                 'itbis_total' => $note->itbis_total, 'additional_tax_total' => $note->additional_tax_total, 'total' => $note->total,
                 'total_base' => $note->total_base, 'currency' => $invoice->currency->code, 'exchange_rate' => $invoice->exchange_rate,
-                'returned_cost' => $returnedCost,
+                'returned_cost' => $returnedCost, 'applied_amount' => $applied, 'unapplied_amount' => $unapplied,
             ], $note->issue_date);
 
             return $note->fresh();

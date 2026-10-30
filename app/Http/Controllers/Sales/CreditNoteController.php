@@ -2,10 +2,13 @@
 
 namespace App\Http\Controllers\Sales;
 
+use App\Actions\Sales\ApplyAdvance;
 use App\Actions\Sales\IssueCreditNote;
 use App\Enums\CreditNoteReason;
+use App\Enums\InvoiceStatus;
 use App\Exports\TableExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Sales\ApplyAdvanceRequest;
 use App\Http\Requests\Sales\StoreCreditNoteRequest;
 use App\Models\CreditNote;
 use App\Models\Invoice;
@@ -14,6 +17,7 @@ use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Documents\DocumentPdf;
 use App\Support\AuditHistory;
+use App\Support\Money\Decimal;
 use App\Support\TableQuery;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
@@ -84,7 +88,25 @@ class CreditNoteController extends Controller
         return Inertia::render('sales/credit-notes/show', [
             'creditNote' => [...Arr::except($creditNote->toArray(), $canViewCosts ? [] : ['returned_cost']), 'reason_label' => $creditNote->reason->label(), 'ncf_type_label' => $creditNote->ncf_type->label()],
             'history' => AuditHistory::for($creditNote),
+            'openInvoices' => Invoice::query()->visibleTo($this->actor($request))->where('client_id', $creditNote->client_id)->where('currency_id', $creditNote->currency_id)
+                ->whereIn('status', [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid])->orderBy('issue_date')
+                ->get(['id', 'number', 'ncf', 'issue_date', 'due_date', 'total', 'itbis_total', 'taxable_total', 'balance', 'currency_id']),
+            'can' => [
+                'apply' => $creditNote->status === 'issued' && Decimal::cmp($creditNote->unapplied_amount, '0') > 0 && $this->actor($request)->can('sales.receipts.create'),
+            ],
         ]);
+    }
+
+    #[Middleware('permission:sales.receipts.create')]
+    public function apply(ApplyAdvanceRequest $request, CreditNote $creditNote, ApplyAdvance $applyAdvance): RedirectResponse
+    {
+        Gate::authorize('view', $creditNote);
+        /** @var list<array{invoice_id: int|string, amount: string}> $applications */
+        $applications = $request->validated('applications');
+        $applied = Decimal::sum(array_column($applications, 'amount'));
+        $creditNote = $applyAdvance->handle($creditNote, $applications, $this->actor($request));
+
+        return redirect()->route('sales.credit-notes.show', $creditNote)->with('success', 'Saldo a favor aplicado: '.DocumentPdf::money($applied, $creditNote->currency->code));
     }
 
     #[Middleware('permission:sales.credit-notes.view')]

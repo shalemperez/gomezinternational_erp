@@ -3,6 +3,7 @@
 namespace App\Services\Sales;
 
 use App\Exceptions\DocumentStateException;
+use App\Models\CreditNote;
 use App\Models\Invoice;
 use App\Models\Receipt;
 use App\Models\ReceiptApplication;
@@ -51,11 +52,12 @@ class ReceiptApplications
 
     /**
      * Stores the applications, reduces each invoice's balance and records the payment on the invoice.
+     * A receipt or a credit note is the source; a credit note application has no receipt and is dated today.
      *
      * @param  list<array{invoice_id: int|string, amount: string}>  $applications
      * @param  Collection<int, Invoice>  $invoices  as returned by lockAndCheck()
      */
-    public function record(Receipt $receipt, array $applications, string $source, User $actor, Collection $invoices): void
+    public function record(Receipt|CreditNote $source, array $applications, string $sourceType, User $actor, Collection $invoices): void
     {
         foreach ($applications as $application) {
             $invoiceId = (int) $application['invoice_id'];
@@ -63,14 +65,26 @@ class ReceiptApplications
             $amount = (string) $application['amount'];
 
             ReceiptApplication::query()->create([
-                'receipt_id' => $receipt->id, 'invoice_id' => $invoiceId, 'amount' => $amount, 'source' => $source, 'created_by' => $actor->id,
+                'receipt_id' => $source instanceof Receipt ? $source->id : null,
+                'credit_note_id' => $source instanceof CreditNote ? $source->id : null,
+                'invoice_id' => $invoiceId,
+                'amount' => $amount,
+                'source' => $sourceType,
+                'applied_on' => $sourceType === 'receipt' && $source instanceof Receipt ? $source->receipt_date->toDateString() : today()->toDateString(),
+                'created_by' => $actor->id,
             ]);
             $invoice->forceFill(['paid_amount' => Decimal::sum([$invoice->paid_amount, $amount])])->save();
             $invoice->refreshFinancials();
 
             activity('invoices')->causedBy($actor)->performedOn($invoice)->event('payment_applied')
-                ->withProperties(['receipt_id' => $receipt->id, 'number' => $receipt->number, 'amount' => $amount])
-                ->log("Cobro {$receipt->number} aplicado a la factura {$invoice->number}");
+                ->withProperties([
+                    'receipt_id' => $source instanceof Receipt ? $source->id : null,
+                    'credit_note_id' => $source instanceof CreditNote ? $source->id : null,
+                    'number' => $source->number, 'amount' => $amount, 'source' => $sourceType,
+                ])
+                ->log($sourceType === 'credit_note'
+                    ? "Saldo a favor de la nota {$source->number} aplicado a la factura {$invoice->number}"
+                    : "Cobro {$source->number} aplicado a la factura {$invoice->number}");
         }
     }
 

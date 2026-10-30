@@ -153,7 +153,7 @@ class ClientStatementService
                 'description' => 'Sobre factura '.$note->invoice->number, 'debit' => Decimal::money('0'), 'credit' => Decimal::money($note->total),
             ]);
 
-        $payments = ReceiptApplication::query()
+        $payments = ReceiptApplication::query()->whereNotNull('receipt_id')
             ->whereHas('receipt', fn (Builder $query) => $query->where('client_id', $client->id)->where('status', ReceiptStatus::Posted))
             ->with(['receipt.currency:id,code', 'receipt:id,number,receipt_date,currency_id', 'invoice:id,number'])->get()
             ->map(fn (ReceiptApplication $application) => [

@@ -9,10 +9,12 @@ use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
- * @property int $receipt_id
+ * @property int|null $receipt_id
+ * @property int|null $credit_note_id
  * @property int $invoice_id
  * @property string $amount
  * @property string $source
+ * @property Carbon $applied_on
  * @property int $created_by
  * @property Carbon $created_at
  */
@@ -20,11 +22,17 @@ class ReceiptApplication extends Model
 {
     use LogsModelActivity;
 
-    protected $fillable = ['receipt_id', 'invoice_id', 'amount', 'source', 'created_by'];
+    protected $fillable = ['receipt_id', 'credit_note_id', 'invoice_id', 'amount', 'source', 'applied_on', 'created_by'];
 
     protected function casts(): array
     {
-        return ['amount' => 'decimal:2'];
+        return ['amount' => 'decimal:2', 'applied_on' => 'date:Y-m-d'];
+    }
+
+    /** @return BelongsTo<CreditNote, $this> */
+    public function creditNote(): BelongsTo
+    {
+        return $this->belongsTo(CreditNote::class);
     }
 
     /** @return BelongsTo<Receipt, $this> */

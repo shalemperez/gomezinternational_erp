@@ -26,7 +26,10 @@ import {
     formatMoney,
     formatNumber,
 } from '@/lib/format';
-import { create as createCreditNote } from '@/routes/sales/credit-notes';
+import {
+    create as createCreditNote,
+    show as showCreditNote,
+} from '@/routes/sales/credit-notes';
 import { create as createDebitNote } from '@/routes/sales/debit-notes';
 import {
     create as createDispatch,
@@ -66,7 +69,8 @@ type Props = {
     }[];
     applications: {
         id: number;
-        receipt_id: number;
+        receipt_id: number | null;
+        credit_note_id: number | null;
         receipt_number: string;
         receipt_date: string;
         amount: string;
@@ -435,9 +439,17 @@ export default function InvoiceShow({
                                             <td className="p-2">
                                                 <Link
                                                     className="font-mono underline"
-                                                    href={showReceipt.url(
-                                                        application.receipt_id,
-                                                    )}
+                                                    href={
+                                                        application.receipt_id !==
+                                                        null
+                                                            ? showReceipt.url(
+                                                                  application.receipt_id,
+                                                              )
+                                                            : showCreditNote.url(
+                                                                  application.credit_note_id ??
+                                                                      0,
+                                                              )
+                                                    }
                                                 >
                                                     {application.receipt_number}
                                                 </Link>
@@ -449,9 +461,12 @@ export default function InvoiceShow({
                                             </td>
                                             <td className="p-2">
                                                 {application.source ===
-                                                'advance'
-                                                    ? 'Anticipo'
-                                                    : 'Cobro'}
+                                                'credit_note'
+                                                    ? 'Saldo a favor'
+                                                    : application.source ===
+                                                        'advance'
+                                                      ? 'Anticipo'
+                                                      : 'Cobro'}
                                             </td>
                                             <td className="p-2 text-right">
                                                 {formatMoney(
