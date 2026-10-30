@@ -34,7 +34,7 @@ class StoreReceiptRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'client_id' => ['required', 'integer', Rule::exists('clients', 'id')->where('is_active', true)],
+            'client_id' => ['required', 'integer', 'exists:clients,id'],
             'currency_id' => ['required', 'integer', Rule::exists('currencies', 'id')->where('is_active', true)],
             'receipt_date' => ['required', 'date_format:Y-m-d'],
             'payment_method' => ['required', Rule::in(['transfer', 'check', 'cash', 'card'])],

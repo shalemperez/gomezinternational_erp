@@ -6,6 +6,7 @@ use App\Exceptions\DocumentStateException;
 use App\Exceptions\ImmutableDocumentException;
 use App\Models\AccountingEvent;
 use App\Models\AdditionalTax;
+use App\Models\Client;
 use App\Models\CreditNote;
 use App\Models\DebitNote;
 use App\Models\Invoice;
@@ -241,4 +242,17 @@ test('discount notes skip fixed-per-unit taxes and every note uses the invoice l
     $return = CreditNote::latest('id')->firstOrFail();
     expect($return->total)->toBe('134.80')->and($return->additional_tax_total)->toBe('15.00') // 100 + 10 + 5 + 18 % × 110
         ->and(collect($return->lines->first()->additional_taxes)->pluck('code')->sort()->values()->all())->toBe(['ISC-ADV', 'ISC-FIX']);
+});
+
+test('after-sale documents accept inactive clients and products', function () {
+    actingAsRole('accounting');
+    activeSequence('B03', ['range_to' => 100]);
+    $i = issuedInvoice();
+    $line = $i->lines->first();
+    Product::query()->whereKey($line->product_id)->update(['is_active' => false]);
+    Client::query()->whereKey($i->client_id)->update(['is_active' => false]);
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i))->assertRedirect()->assertSessionHas('success');
+    $this->post(route('sales.debit-notes.store'), validDebitNotePayload($i, ['lines' => [['product_id' => Product::factory()->create(['is_active' => false])->id, 'description' => 'Flete', 'quantity' => '1', 'unit_price' => '10', 'discount_percent' => '0']]]))->assertRedirect()->assertSessionHas('success');
+    $this->post(route('sales.receipts.store'), validReceiptPayload($i->fresh()))->assertRedirect()->assertSessionHas('success');
+    expect($i->fresh()->status)->toBe(InvoiceStatus::Paid);
 });

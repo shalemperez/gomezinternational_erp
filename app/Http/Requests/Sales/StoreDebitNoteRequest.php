@@ -27,7 +27,7 @@ class StoreDebitNoteRequest extends FormRequest
             'invoice_id' => ['required', 'integer', 'exists:invoices,id'],
             'reason' => ['required', Rule::enum(DebitNoteReason::class)],
             'notes' => ['nullable', 'string', 'max:2000'],
-            ...$this->lineRules(),
+            ...$this->lineRules(activeProductsOnly: false),
             'lines.*.unit_price' => ['required', 'numeric', 'gt:0', 'regex:/^\d{1,10}(\.\d{1,4})?$/'],
         ];
     }

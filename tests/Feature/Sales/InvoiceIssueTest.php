@@ -186,3 +186,14 @@ test('issuing stamps today as the fiscal date and judges the sequence expiry on 
     expect($i->issue_date->toDateString())->toBe(now()->toDateString())->and($i->due_date->toDateString())->toBe(now()->addDays(30)->toDateString())
         ->and(AccountingEvent::where('type', 'invoice_issued')->first()->payload['issue_date'])->toBe(now()->toDateString());
 });
+
+test('paid invoices keep the dispatch action until fully dispatched', function () {
+    actingAsRole('owner');
+    $i = issuedInvoice();
+    $i->forceFill(['paid_amount' => $i->total])->save();
+    $i->refreshFinancials();
+    expect($i->fresh()->status)->toBe(InvoiceStatus::Paid);
+    $this->get(route('sales.invoices.show', $i))->assertOk()->assertInertia(fn ($p) => $p->where('can.dispatch', true)->where('can.receipt', false));
+    $i->forceFill(['dispatch_status' => 'complete'])->save();
+    $this->get(route('sales.invoices.show', $i))->assertOk()->assertInertia(fn ($p) => $p->where('can.dispatch', false));
+});

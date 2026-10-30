@@ -84,6 +84,8 @@ test('an advance is later applied to another invoice and the receipt can be canc
     expect($r->fresh()->status)->toBe(ReceiptStatus::Cancelled)->and($r->fresh()->cancelled_by)->toBe($user->id)->and($r->fresh()->unapplied_amount)->toBe('0.00')
         ->and($a->fresh()->status)->toBe(InvoiceStatus::Issued)->and($a->fresh()->paid_amount)->toBe('0.00')->and($b->fresh()->balance)->toBe('236.00')
         ->and(AccountingEvent::where('type', 'receipt_cancelled')->first()->payload['reversed'])->toHaveCount(2)
+        ->and(AccountingEvent::where('type', 'receipt_cancelled')->first()->payload)->toHaveKeys(['retention_itbis', 'retention_isr', 'applied_total'])
+        ->and(AccountingEvent::where('type', 'receipt_cancelled')->first()->payload['applied_total'])->toBe('436.00')
         ->and(Activity::inLog('receipts')->where('event', 'cancelled')->exists())->toBeTrue();
     $this->post(route('sales.receipts.cancel', $r), ['reason' => 'x'])->assertSessionHas('error', 'El recibo ya está anulado');
     $this->post(route('sales.receipts.apply', $r), ['applications' => [['invoice_id' => $b->id, 'amount' => '1']]])->assertSessionHas('error', 'El recibo está anulado');

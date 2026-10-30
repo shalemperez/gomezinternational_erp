@@ -7,11 +7,11 @@ use Illuminate\Validation\Rule;
 trait ValidatesDocumentLines
 {
     /** @return array<string, mixed> */
-    protected function lineRules(int $max = 200): array
+    protected function lineRules(int $max = 200, bool $activeProductsOnly = true): array
     {
         return [
             'lines' => ['required', 'array', 'min:1', "max:{$max}"],
-            'lines.*.product_id' => ['required', 'integer', Rule::exists('products', 'id')->where('is_active', true)],
+            'lines.*.product_id' => ['required', 'integer', $activeProductsOnly ? Rule::exists('products', 'id')->where('is_active', true) : Rule::exists('products', 'id')],
             'lines.*.description' => ['nullable', 'string', 'max:200'],
             'lines.*.quantity' => ['required', 'numeric', 'gt:0', 'regex:/^\d{1,10}(\.\d{1,4})?$/'],
             'lines.*.unit_price' => ['required', 'numeric', 'min:0', 'regex:/^\d{1,10}(\.\d{1,4})?$/'],

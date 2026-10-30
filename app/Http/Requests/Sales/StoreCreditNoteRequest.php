@@ -31,7 +31,7 @@ class StoreCreditNoteRequest extends FormRequest
             'reason' => ['required', Rule::enum(CreditNoteReason::class)],
             'warehouse_id' => ['nullable', 'integer', Rule::exists('warehouses', 'id')->where('is_active', true)],
             'notes' => ['nullable', 'string', 'max:2000'],
-            ...$this->lineRules(),
+            ...$this->lineRules(activeProductsOnly: false),
             'lines.*.invoice_line_id' => ['nullable', 'integer', 'distinct', 'exists:invoice_lines,id'],
             'lines.*.lot_id' => ['nullable', 'integer', 'exists:lots,id'],
         ];

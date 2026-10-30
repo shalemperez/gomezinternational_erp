@@ -38,6 +38,7 @@ class CancelReceipt
                 $reversed[] = ['invoice_id' => $invoice->id, 'amount' => $application->amount];
             }
 
+            $appliedBefore = $receipt->applied_total;
             $receipt->forceFill([
                 'status' => ReceiptStatus::Cancelled,
                 'applied_total' => '0.00',
@@ -54,6 +55,7 @@ class CancelReceipt
             $this->events->record('receipt_cancelled', $receipt, [
                 'number' => $receipt->number, 'client_id' => $receipt->client_id, 'reason' => $reason, 'reversed' => $reversed,
                 'amount_received' => $receipt->amount_received, 'currency' => $receipt->currency->code, 'exchange_rate' => $receipt->exchange_rate,
+                'retention_itbis' => $receipt->retention_itbis, 'retention_isr' => $receipt->retention_isr, 'applied_total' => $appliedBefore,
             ], now());
 
             return $receipt->fresh();
