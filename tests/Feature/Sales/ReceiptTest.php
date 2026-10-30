@@ -59,6 +59,13 @@ test('applications cannot exceed the invoice balance or the receipt amount and m
     expect(Receipt::count())->toBe(0);
 });
 
+test('money inputs accept at most two decimals', function () {
+    actingAsRole('accounting');
+    $a = issuedInvoice();
+    $this->post(route('sales.receipts.store'), validReceiptPayload($a, ['applications' => [['invoice_id' => $a->id, 'amount' => '0.004']]]))->assertSessionHasErrors(['applications.0.amount' => 'Usa como máximo dos decimales.']);
+    expect(Receipt::count())->toBe(0);
+});
+
 test('an advance is later applied to another invoice and the receipt can be cancelled reversing everything', function () {
     $user = actingAsRole('accounting');
     $a = issuedInvoice();
@@ -70,6 +77,7 @@ test('an advance is later applied to another invoice and the receipt can be canc
     expect($r->fresh()->unapplied_amount)->toBe('64.00')->and($r->fresh()->applied_total)->toBe('436.00')->and($b->fresh()->balance)->toBe('36.00')
         ->and(ReceiptApplication::where('source', 'advance')->count())->toBe(1)
         ->and(AccountingEvent::where('type', 'advance_applied')->count())->toBe(1)
+        ->and(AccountingEvent::where('type', 'advance_applied')->first()->payload['applied_total'])->toBe('200.00')
         ->and(Activity::inLog('receipts')->where('event', 'advance_applied')->where('subject_id', $r->id)->exists())->toBeTrue();
 
     $this->post(route('sales.receipts.cancel', $r), ['reason' => 'Transferencia rebotada'])->assertRedirect()->assertSessionHas('success', 'Recibo REC-000001 anulado');

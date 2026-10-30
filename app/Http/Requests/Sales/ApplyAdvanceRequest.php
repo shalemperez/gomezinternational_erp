@@ -27,6 +27,12 @@ class ApplyAdvanceRequest extends FormRequest
         ];
     }
 
+    /** @return array<string, string> */
+    public function messages(): array
+    {
+        return ['applications.*.amount.regex' => 'Usa como máximo dos decimales.'];
+    }
+
     public function withValidator(Validator $validator): void
     {
         $validator->after(function (Validator $validator): void {

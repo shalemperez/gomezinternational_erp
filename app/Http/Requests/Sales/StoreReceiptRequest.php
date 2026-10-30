@@ -40,9 +40,9 @@ class StoreReceiptRequest extends FormRequest
             'payment_method' => ['required', Rule::in(['transfer', 'check', 'cash', 'card'])],
             'financial_account_id' => ['required', 'integer', Rule::exists('financial_accounts', 'id')->where('is_active', true)],
             'reference' => ['nullable', 'string', 'max:100'],
-            'amount_received' => ['required', 'numeric', 'min:0', 'max:999999999999.99'],
-            'retention_itbis' => ['required', 'numeric', 'min:0', 'max:999999999999.99'],
-            'retention_isr' => ['required', 'numeric', 'min:0', 'max:999999999999.99'],
+            'amount_received' => ['required', 'numeric', 'min:0', 'max:999999999999.99', 'regex:/^\d{1,12}(\.\d{1,2})?$/'],
+            'retention_itbis' => ['required', 'numeric', 'min:0', 'max:999999999999.99', 'regex:/^\d{1,12}(\.\d{1,2})?$/'],
+            'retention_isr' => ['required', 'numeric', 'min:0', 'max:999999999999.99', 'regex:/^\d{1,12}(\.\d{1,2})?$/'],
             'notes' => ['nullable', 'string', 'max:2000'],
             'applications' => ['present', 'array', 'max:100'],
             ...$this->applicationRules(),
@@ -90,6 +90,12 @@ class StoreReceiptRequest extends FormRequest
     /** @return array<string, string> */
     public function messages(): array
     {
-        return ['financial_account_id.exists' => 'La cuenta no existe o está inactiva.'];
+        return [
+            'financial_account_id.exists' => 'La cuenta no existe o está inactiva.',
+            'amount_received.regex' => 'Usa como máximo dos decimales.',
+            'retention_itbis.regex' => 'Usa como máximo dos decimales.',
+            'retention_isr.regex' => 'Usa como máximo dos decimales.',
+            'applications.*.amount.regex' => 'Usa como máximo dos decimales.',
+        ];
     }
 }

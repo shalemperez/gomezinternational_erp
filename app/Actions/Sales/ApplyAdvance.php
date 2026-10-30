@@ -50,7 +50,7 @@ class ApplyAdvance
 
             $this->events->record('advance_applied', $receipt, [
                 'number' => $receipt->number, 'client_id' => $receipt->client_id, 'applications' => $this->applications->eventPayload($applications, $invoices),
-                'applied_total' => $receipt->applied_total, 'currency' => $receipt->currency->code, 'exchange_rate' => $receipt->exchange_rate,
+                'applied_total' => $applied, 'receipt_applied_total' => $receipt->applied_total, 'currency' => $receipt->currency->code, 'exchange_rate' => $receipt->exchange_rate,
             ]);
 
             return $receipt->fresh();

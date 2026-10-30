@@ -14,7 +14,7 @@ trait ValidatesReceiptApplications
     {
         return [
             'applications.*.invoice_id' => ['required', 'integer', 'exists:invoices,id', 'distinct'],
-            'applications.*.amount' => ['required', 'numeric', 'gt:0', 'max:999999999999.99'],
+            'applications.*.amount' => ['required', 'numeric', 'gt:0', 'max:999999999999.99', 'regex:/^\d{1,12}(\.\d{1,2})?$/'],
         ];
     }
 
