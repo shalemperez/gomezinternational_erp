@@ -1,6 +1,8 @@
 <?php
 
+use App\Actions\Sales\CreateInvoiceFromProforma;
 use App\Enums\ProformaStatus;
+use App\Exceptions\DocumentStateException;
 use App\Models\Invoice;
 use App\Models\Proforma;
 use App\Models\Warehouse;
@@ -36,4 +38,15 @@ test('only approved proformas can be invoiced', function () {
     actingAsRole('owner');
     $p = Proforma::factory()->sent()->withLines(1)->create();
     $this->post(route('sales.proformas.invoice', $p), ['quantities' => [$p->lines->first()->id => '1']])->assertRedirect()->assertSessionHas('error', 'Solo se pueden facturar proformas aprobadas');
+});
+
+test('the conversion re-checks pending quantities under the lock', function () {
+    $actor = actingAsRole('owner');
+    $p = Proforma::factory()->approved()->withLines(1)->create();
+    $line = $p->lines->first();
+    $line->forceFill(['invoiced_quantity' => $line->quantity])->save(); // simulates a concurrent conversion that already invoiced everything
+
+    expect(fn () => app(CreateInvoiceFromProforma::class)->handle($p, [$line->id => '1'], $actor))
+        ->toThrow(DocumentStateException::class, 'Cantidad pendiente: 0.0000.');
+    expect(Invoice::count())->toBe(0);
 });

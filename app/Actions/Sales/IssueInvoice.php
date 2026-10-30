@@ -58,6 +58,7 @@ class IssueInvoice
             $totals = DocumentLines::totals($computed, $invoice->exchange_rate);
             $type = $this->resolver->forSale($invoice->client);
             $this->guardConsumoThreshold($type, $totals['total_base'], $invoice->client);
+            Client::query()->whereKey($invoice->client_id)->lockForUpdate()->first(); // serialize concurrent issues for the same client
             $this->guardCreditLimit($invoice, $totals['total_base'], $actor, $creditOverride, $creditOverrideReason);
 
             DocumentLines::write($invoice, $computed);

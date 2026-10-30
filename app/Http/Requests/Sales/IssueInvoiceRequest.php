@@ -16,7 +16,7 @@ class IssueInvoiceRequest extends FormRequest
     {
         return [
             'credit_override' => ['nullable', 'boolean'],
-            'credit_override_reason' => ['nullable', 'string', 'max:255', 'required_if:credit_override,1'],
+            'credit_override_reason' => ['nullable', 'string', 'max:255', 'required_if_accepted:credit_override'],
         ];
     }
 
@@ -24,7 +24,7 @@ class IssueInvoiceRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'credit_override_reason.required_if' => 'Indica el motivo de la autorización.',
+            'credit_override_reason.required_if_accepted' => 'Indica el motivo de la autorización.',
         ];
     }
 }

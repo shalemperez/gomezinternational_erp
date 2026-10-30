@@ -33,11 +33,18 @@ class CreateInvoiceFromProforma
                 if (Decimal::cmp($quantity, '0') <= 0) {
                     continue;
                 }
+                $remaining = Decimal::qty(Decimal::of($line->quantity)->minus(Decimal::of($line->invoiced_quantity)));
+                if (Decimal::cmp($quantity, $remaining) > 0) {
+                    throw new DocumentStateException("Cantidad pendiente: {$remaining}.");
+                }
                 $lines[] = [
                     'product_id' => $line->product_id, 'description' => $line->description, 'quantity' => $quantity,
                     'unit_price' => $line->unit_price, 'discount_percent' => $line->discount_percent,
                 ];
                 $line->forceFill(['invoiced_quantity' => Decimal::qty(Decimal::of($line->invoiced_quantity)->plus(Decimal::of($quantity)))])->save();
+            }
+            if ($lines === []) {
+                throw new DocumentStateException('Indica al menos una cantidad a facturar.');
             }
 
             $invoice = $this->saveInvoice->handle([

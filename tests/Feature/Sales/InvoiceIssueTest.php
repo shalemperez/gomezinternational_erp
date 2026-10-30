@@ -149,3 +149,12 @@ test('index filters, export and the financial status helper', function () {
     $this->get(route('sales.invoices.export', ['format' => 'csv']))->assertOk();
     expect(Activity::inLog('exports')->where('event', 'exported')->latest('id')->first()->properties['table'])->toBe('invoices');
 });
+
+test('a credit override sent as true still requires a reason', function () {
+    $owner = actingAsRole('owner');
+    activeSequence('B01', ['range_to' => 10]);
+    $client = Client::factory()->create(['credit_limit' => '300.00']);
+    $draft = draftFor(['client_id' => $client->id, 'salesperson_id' => $this->sp->id], $owner);
+
+    $this->post(route('sales.invoices.issue', $draft), ['credit_override' => 'true'])->assertSessionHasErrors(['credit_override_reason' => 'Indica el motivo de la autorización.']);
+});
