@@ -11,6 +11,7 @@ use App\Models\DebitNote;
 use App\Models\EcfDocument;
 use App\Models\Invoice;
 use App\Models\User;
+use App\Notifications\EcfRejected;
 use App\Services\Ecf\Providers\DgiiDirectProvider;
 use App\Services\Ecf\Providers\FakeEcfProvider;
 use App\Services\Settings;
@@ -18,6 +19,8 @@ use App\Support\Ecf\EcfDocumentData;
 use App\Support\Ecf\EcfSubmissionResult;
 use App\Support\Fiscal\FiscalNumber;
 use App\Support\FiscalId;
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Notification;
 use Throwable;
 
 /**
@@ -154,6 +157,18 @@ class EcfService
             ->event($result->status === EcfStatus::InProcess ? 'polled' : $result->status->value)
             ->withProperties(['track_id' => $ecfDocument->track_id, 'code' => $result->code, 'messages' => $result->messages])
             ->log($result->status->label());
+
+        if ($result->status === EcfStatus::Rejected) {
+            Notification::send($this->alertRecipients(), new EcfRejected($ecfDocument));
+        }
+    }
+
+    /**
+     * @return Collection<int, User>
+     */
+    public function alertRecipients(): Collection
+    {
+        return User::query()->where('is_active', true)->get()->filter(fn (User $user) => $user->can('fiscal.ecf.alerts'));
     }
 
     /**
