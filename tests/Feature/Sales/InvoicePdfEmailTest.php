@@ -1,6 +1,7 @@
 <?php
 
 use App\Actions\Sales\CancelInvoice;
+use App\Enums\InvoiceStatus;
 use App\Http\Controllers\Sales\InvoiceController;
 use App\Models\Invoice;
 use App\Models\SentEmail;
@@ -48,4 +49,20 @@ test('sending an invoice by email attaches the pdf, sets sent_at and refuses dra
     Log::shouldReceive('error'); // the exception handler reports the flashed DocumentStateException
     $draft = Invoice::factory()->withLines(1)->create();
     $this->post(route('sales.invoices.send', $draft), ['to' => ['c@x.test']])->assertRedirect()->assertSessionHas('error', 'Solo se pueden enviar facturas emitidas');
+});
+
+test('a cancelled invoice cannot be e-mailed', function () {
+    actingAsRole('owner', ['gmail_connected_at' => now(), 'gmail_email' => 'yo@empresa.test']);
+    Log::shouldReceive('error'); // the exception handler reports the flashed DocumentStateException
+    $cancelled = issuedInvoice();
+    $cancelled->forceFill(['status' => InvoiceStatus::Cancelled, 'cancelled_at' => now()])->save();
+    $this->post(route('sales.invoices.send', $cancelled), ['to' => ['c@x.test']])->assertSessionHas('error', 'No se puede enviar una factura anulada');
+    expect(SentEmail::where('mailable_id', $cancelled->id)->exists())->toBeFalse();
+});
+
+test('users without view-all cannot download or send another salesperson\'s invoice', function () {
+    salesUserWithSalesperson();
+    $foreign = issuedInvoice();
+    $this->get(route('sales.invoices.pdf', $foreign))->assertForbidden();
+    $this->post(route('sales.invoices.send', $foreign), ['to' => ['c@x.test']])->assertForbidden();
 });

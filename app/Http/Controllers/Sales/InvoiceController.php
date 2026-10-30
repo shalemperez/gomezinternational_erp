@@ -183,6 +183,9 @@ class InvoiceController extends Controller
         if (! $invoice->issued_at) {
             throw new DocumentStateException('Solo se pueden enviar facturas emitidas');
         }
+        if ($invoice->status === InvoiceStatus::Cancelled) {
+            throw new DocumentStateException('No se puede enviar una factura anulada');
+        }
         $user = $this->actor($request);
         $to = array_values($request->validated('to'));
         $cc = array_values($request->validated('cc') ?? []);
@@ -329,6 +332,7 @@ class InvoiceController extends Controller
             ...$invoice->toArray(),
             'status_label' => $invoice->status->label(),
             'kind_label' => $invoice->kind->label(),
+            'ncf_type_label' => $invoice->ncf_type?->label(),
             'client' => [
                 'id' => $invoice->client->id,
                 'code' => $invoice->client->code,

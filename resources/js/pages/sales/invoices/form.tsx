@@ -106,8 +106,7 @@ export default function InvoiceForm({
             credit_days: value === 'cash' ? 0 : current.credit_days,
         }));
 
-    const submit = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
+    const applyTransform = () =>
         transform((current) => ({
             ...current,
             lines: current.lines.map((line) => ({
@@ -118,6 +117,10 @@ export default function InvoiceForm({
                 discount_percent: line.discount_percent,
             })),
         }));
+
+    const submit = (event: FormEvent<HTMLFormElement>) => {
+        event.preventDefault();
+        applyTransform();
         if (invoice) {
             put(update.url(invoice.id));
         } else {
@@ -127,7 +130,14 @@ export default function InvoiceForm({
 
     const issue = () => {
         if (invoice) {
-            router.visit(show.url(invoice.id), { data: { emitir: '1' } });
+            applyTransform();
+            put(update.url(invoice.id), {
+                preserveScroll: true,
+                onSuccess: () =>
+                    router.visit(show.url(invoice.id), {
+                        data: { emitir: '1' },
+                    }),
+            });
         }
     };
 

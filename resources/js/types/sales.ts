@@ -130,6 +130,7 @@ export type Invoice = DocumentTotals & {
     fiscal_mode: string | null;
     ncf: string | null;
     ncf_type: string | null;
+    ncf_type_label?: string | null;
     ncf_expires_on: string | null;
     client_id: number;
     client_name: string | null;

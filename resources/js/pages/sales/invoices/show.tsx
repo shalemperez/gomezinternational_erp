@@ -1,4 +1,4 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { Pencil } from 'lucide-react';
 import { useState } from 'react';
 import { ConfirmDelete } from '@/components/erp/confirm-delete';
@@ -68,10 +68,11 @@ export default function InvoiceShow({
     emails,
     can: abilities,
 }: Props) {
+    const { url } = usePage();
     const [issueOpen, setIssueOpen] = useState(
         () =>
             abilities.issue &&
-            new URLSearchParams(window.location.search).get('emitir') === '1',
+            new URL(url, 'http://localhost').searchParams.get('emitir') === '1',
     );
     const [creditOverride, setCreditOverride] = useState(false);
     const [creditOverrideReason, setCreditOverrideReason] = useState('');
@@ -181,9 +182,13 @@ export default function InvoiceShow({
 
     const meta = [
         { label: 'NCF', value: invoice.ncf ?? '' },
-        { label: 'Tipo', value: invoice.ncf_type ?? '' },
+        { label: 'Tipo', value: invoice.ncf_type_label ?? '' },
         { label: 'Cliente', value: invoice.client_name ?? '' },
-        { label: 'RNC', value: invoice.client?.formatted_tax_id ?? '' },
+        {
+            label: 'RNC',
+            value:
+                invoice.client_tax_id ?? invoice.client?.formatted_tax_id ?? '',
+        },
         { label: 'Vendedor', value: invoice.salesperson?.name ?? '' },
         { label: 'Fecha', value: formatDate(invoice.issue_date) },
         { label: 'Vencimiento', value: formatDate(invoice.due_date) },
