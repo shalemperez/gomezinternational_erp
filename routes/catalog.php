@@ -6,6 +6,7 @@ use App\Http\Controllers\Catalog\ClientController;
 use App\Http\Controllers\Catalog\PriceListController;
 use App\Http\Controllers\Catalog\ProductCategoryController;
 use App\Http\Controllers\Catalog\ProductController;
+use App\Http\Controllers\Catalog\ProductSearchController;
 use App\Http\Controllers\Catalog\SalespersonController;
 use App\Http\Controllers\Catalog\SupplierController;
 use App\Http\Controllers\Catalog\UnitOfMeasureController;
@@ -24,6 +25,7 @@ Route::middleware(['auth'])->prefix('catalog')->name('catalog.')->group(function
     Route::get('additional-taxes/export', [AdditionalTaxController::class, 'export'])->name('additional-taxes.export');
     Route::resource('additional-taxes', AdditionalTaxController::class)->except(['show'])->parameters(['additional-taxes' => 'additionalTax']);
 
+    Route::get('products/search', ProductSearchController::class)->name('products.search');
     Route::get('products/export', [ProductController::class, 'export'])->name('products.export');
     Route::resource('products', ProductController::class)->except(['show']);
 
