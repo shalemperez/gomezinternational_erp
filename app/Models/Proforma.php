@@ -113,4 +113,10 @@ class Proforma extends Model implements HasDocumentLines
     {
         return $this->hasMany(ProformaLine::class)->orderBy('line_number');
     }
+
+    /** @return HasMany<Invoice, $this> */
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
 }

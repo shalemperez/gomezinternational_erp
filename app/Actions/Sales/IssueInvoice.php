@@ -1,0 +1,148 @@
+<?php
+
+namespace App\Actions\Sales;
+
+use App\Enums\DocumentKind;
+use App\Enums\InvoiceStatus;
+use App\Enums\NcfType;
+use App\Enums\PaymentTerms;
+use App\Exceptions\DocumentStateException;
+use App\Models\Client;
+use App\Models\Invoice;
+use App\Models\InvoiceLine;
+use App\Models\User;
+use App\Services\Accounting\AccountingEventRecorder;
+use App\Services\Documents\DocumentLines;
+use App\Services\Documents\DocumentNumbering;
+use App\Services\Documents\DocumentTotalsCalculator;
+use App\Services\Fiscal\FiscalNumberingService;
+use App\Services\Fiscal\NcfTypeResolver;
+use App\Services\Inventory\InventoryService;
+use App\Services\Sales\ClientAccount;
+use App\Services\Settings;
+use App\Support\Documents\ComputedTotals;
+use App\Support\Documents\LineInput;
+use App\Support\Money\Decimal;
+use Illuminate\Support\Facades\DB;
+
+class IssueInvoice
+{
+    public function __construct(
+        private readonly DocumentTotalsCalculator $calculator,
+        private readonly DocumentNumbering $documentNumbering,
+        private readonly FiscalNumberingService $numbering,
+        private readonly NcfTypeResolver $resolver,
+        private readonly InventoryService $inventory,
+        private readonly AccountingEventRecorder $events,
+        private readonly Settings $settings,
+    ) {}
+
+    public function handle(Invoice $invoice, User $actor, bool $creditOverride = false, ?string $creditOverrideReason = null): Invoice
+    {
+        return DB::transaction(function () use ($invoice, $actor, $creditOverride, $creditOverrideReason): Invoice {
+            $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->with(['lines.product', 'client', 'currency'])->firstOrFail();
+            if (! $invoice->isDraft()) {
+                throw new DocumentStateException("La factura está {$invoice->status->label()} y no admite esta acción");
+            }
+            if ($invoice->lines->isEmpty()) {
+                throw new DocumentStateException('La factura no tiene líneas');
+            }
+            if (! $invoice->client->is_active) {
+                throw new DocumentStateException('El cliente está inactivo');
+            }
+            if ($this->numbering->mode() !== 'ncf') {
+                throw new DocumentStateException('El modo fiscal e-CF se habilita en la fase 3');
+            }
+
+            $computed = $this->calculator->compute(array_values($invoice->lines->map(fn (InvoiceLine $line) => new LineInput($line->product_id, $line->quantity, $line->unit_price, $line->discount_percent, $line->description))->all()));
+            $totals = DocumentLines::totals($computed, $invoice->exchange_rate);
+            $type = $this->resolver->forSale($invoice->client);
+            $this->guardConsumoThreshold($type, $totals['total_base'], $invoice->client);
+            $this->guardCreditLimit($invoice, $totals['total_base'], $actor, $creditOverride, $creditOverrideReason);
+
+            DocumentLines::write($invoice, $computed);
+            foreach ($invoice->lines()->get() as $line) {
+                $this->inventory->reserve($line, $line->product_id, (int) $invoice->warehouse_id, $line->quantity);
+            }
+
+            $fiscal = $this->numbering->assign($type, $invoice->issue_date);
+            $invoice->forceFill([
+                ...$totals,
+                'number' => $this->documentNumbering->next(DocumentKind::Invoice),
+                'ncf' => $fiscal->ncf,
+                'ncf_type' => $fiscal->type,
+                'ncf_expires_on' => $fiscal->expiresOn?->toDateString(),
+                'ncf_sequence_id' => $fiscal->sequenceId,
+                'fiscal_mode' => 'ncf',
+                'client_name' => $invoice->client->business_name,
+                'client_tax_id' => $invoice->client->tax_id,
+                'client_tax_id_type' => $invoice->client->tax_id_type->value,
+                'client_address' => $invoice->client->address,
+                'status' => InvoiceStatus::Issued,
+                'balance' => $totals['total'],
+                'issued_at' => now(),
+            ])->save();
+
+            activity('invoices')->causedBy($actor)->performedOn($invoice)->event('issued')
+                ->withProperties(['number' => $invoice->number, 'ncf' => $invoice->ncf, 'total' => $invoice->total])
+                ->log("Factura {$invoice->number} emitida con NCF {$invoice->ncf}");
+
+            $this->events->record('invoice_issued', $invoice, [
+                'number' => $invoice->number, 'ncf' => $invoice->ncf, 'ncf_type' => $invoice->ncf_type?->value, 'kind' => $invoice->kind->value,
+                'client_id' => $invoice->client_id, 'client_tax_id' => $invoice->client_tax_id, 'salesperson_id' => $invoice->salesperson_id,
+                'issue_date' => $invoice->issue_date->toDateString(), 'due_date' => $invoice->due_date->toDateString(), 'payment_terms' => $invoice->payment_terms->value,
+                'subtotal' => $invoice->subtotal, 'discount_total' => $invoice->discount_total, 'taxable_total' => $invoice->taxable_total,
+                'itbis_total' => $invoice->itbis_total, 'additional_tax_total' => $invoice->additional_tax_total,
+                'additional_taxes' => $this->additionalTaxSummary($computed), 'total' => $invoice->total, 'total_base' => $invoice->total_base,
+                'currency' => $invoice->currency->code, 'exchange_rate' => $invoice->exchange_rate,
+            ], $invoice->issue_date);
+
+            return $invoice->fresh();
+        });
+    }
+
+    private function guardConsumoThreshold(NcfType $type, string $totalBase, Client $client): void
+    {
+        $threshold = Decimal::money((string) $this->settings->get('fiscal.consumo_id_threshold', '250000.00'));
+        if ($type === NcfType::B02 && Decimal::cmp($totalBase, $threshold) >= 0 && blank($client->tax_id)) {
+            throw new DocumentStateException('Las facturas de consumo desde RD$ '.number_format((float) $threshold, 2).' requieren el RNC o cédula del comprador (Norma General 10-2018).');
+        }
+    }
+
+    private function guardCreditLimit(Invoice $invoice, string $totalBase, User $actor, bool $override, ?string $reason): void
+    {
+        $client = $invoice->client;
+        if ($invoice->payment_terms === PaymentTerms::Cash || Decimal::isZero($client->credit_limit)) {
+            return;
+        }
+
+        $limit = $client->credit_limit;
+        $outstanding = ClientAccount::outstandingBase($client);
+        if (Decimal::cmp(Decimal::sum([$outstanding, $totalBase]), $limit) <= 0) {
+            return;
+        }
+
+        if (! ($override && $actor->can('sales.invoices.credit-override'))) {
+            $available = ClientAccount::availableCredit($client) ?? '0.00';
+
+            throw new DocumentStateException('El cliente supera su límite de crédito (disponible RD$ '.number_format((float) $available, 2).'). Un usuario con permiso puede autorizar el exceso.');
+        }
+
+        activity('invoices')->causedBy($actor)->performedOn($invoice)->event('credit_limit_overridden')
+            ->withProperties(['limit' => $limit, 'outstanding' => $outstanding, 'total_base' => $totalBase, 'reason' => $reason])
+            ->log('Exceso de límite de crédito autorizado');
+    }
+
+    /** @return list<array{code: string, amount: string}> */
+    private function additionalTaxSummary(ComputedTotals $computed): array
+    {
+        $amounts = [];
+        foreach ($computed->lines as $line) {
+            foreach ($line->additionalTaxes as $tax) {
+                $amounts[$tax['code']] = Decimal::sum([$amounts[$tax['code']] ?? '0', $tax['amount']]);
+            }
+        }
+
+        return array_map(fn (string $code, string $amount) => ['code' => $code, 'amount' => $amount], array_keys($amounts), array_values($amounts));
+    }
+}

@@ -1,13 +1,20 @@
 <?php
 
+use App\Actions\Sales\IssueInvoice;
+use App\Actions\Sales\SaveInvoice;
+use App\Enums\StockMovementType;
 use App\Models\Client;
 use App\Models\Currency;
+use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Models\Product;
 use App\Models\Salesperson;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
+use App\Models\Warehouse;
+use App\Services\Inventory\InventoryService;
 use App\Support\FiscalId;
+use App\Support\Inventory\StockLine;
 use Database\Seeders\PermissionSeeder;
 use Spatie\Permission\Models\Role;
 
@@ -153,4 +160,35 @@ function validProformaPayload(array $over = []): array
         'valid_until' => now()->addDays(15)->toDateString(), 'price_list_id' => '', 'notes' => '',
         'lines' => [['product_id' => $product->id, 'description' => '', 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '0']],
     ], $over);
+}
+
+function validInvoicePayload(array $over = []): array
+{
+    $client = Client::factory()->create(['credit_days' => 30, 'credit_limit' => '0']);
+    $product = Product::factory()->create(['itbis_rate' => '18.00']);
+    $warehouse = Warehouse::default() ?? Warehouse::factory()->create(['is_default' => true]);
+
+    return array_merge([
+        'client_id' => $client->id, 'salesperson_id' => '', 'warehouse_id' => $warehouse->id, 'currency_id' => Currency::base()->id,
+        'issue_date' => now()->toDateString(), 'payment_terms' => 'credit', 'credit_days' => 30, 'notes' => '',
+        'lines' => [['product_id' => $product->id, 'description' => '', 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '0']],
+    ], $over);
+}
+
+/** Loads stock for every product of the payload, creates the draft through SaveInvoice and issues it. */
+function issuedInvoice(array $over = [], ?User $actor = null): Invoice
+{
+    $actor ??= User::factory()->create();
+    $payload = validInvoicePayload($over);
+    foreach ($payload['lines'] as $line) {
+        app(InventoryService::class)->receive(new StockLine($line['product_id'], $payload['warehouse_id'], '1000', '50'), StockMovementType::Initial, $actor, $actor);
+    }
+    if (! NcfSequence::query()->where('is_active', true)->exists()) {
+        activeSequence('B01', ['range_to' => 1000]);
+        activeSequence('B02', ['range_to' => 1000]);
+    }
+    $payload['salesperson_id'] = $payload['salesperson_id'] ?: Salesperson::factory()->create()->id;
+    $invoice = app(SaveInvoice::class)->handle($payload, $actor->givePermissionTo('sales.invoices.view-all'));
+
+    return app(IssueInvoice::class)->handle($invoice, $actor);
 }
