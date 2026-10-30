@@ -16,7 +16,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Collection;
 
 /**
- * @phpstan-type Movement array{date: string, id: int, currency: string, type: string, type_label: string, number: ?string, ncf: ?string, description: string, debit: string, credit: string}
+ * @phpstan-type Movement array{date: string, id: int, order: int, currency: string, type: string, type_label: string, number: ?string, ncf: ?string, description: string, debit: string, credit: string}
  * @phpstan-type AgingItem array{invoice: Invoice, bucket: string, balance: string, base: string}
  */
 class ClientStatementService
@@ -30,7 +30,7 @@ class ClientStatementService
     {
         $movements = $this->movements($client)
             ->filter(fn (array $movement) => $movement['date'] <= $to->toDateString())
-            ->sortBy([['date', 'asc'], ['id', 'asc']])
+            ->sortBy([['date', 'asc'], ['order', 'asc'], ['id', 'asc']])
             ->groupBy('currency');
 
         $fromDate = $from->toDateString();
@@ -60,31 +60,48 @@ class ClientStatementService
      */
     public function aging(User $viewer, CarbonInterface $asOf, ?int $salespersonId = null, ?string $search = null, ?int $clientId = null): array
     {
+        $asOfDate = $asOf->toDateString();
         $invoices = Invoice::query()
-            ->whereIn('status', [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid])
+            ->whereNotNull('issued_at')->whereDate('issue_date', '<=', $asOfDate)
+            ->where(fn (Builder $query) => $query->whereNot('status', InvoiceStatus::Cancelled)->orWhereDate('cancelled_at', '>', $asOfDate))
             ->when($clientId !== null, fn (Builder $query) => $query->where('client_id', $clientId))
             ->whereHas('client', fn (Builder $query) => $query->visibleTo($viewer)
                 ->when($salespersonId !== null, fn (Builder $q) => $q->where('salesperson_id', $salespersonId))
                 ->when($search !== null && $search !== '', fn (Builder $q) => $q->where(fn (Builder $s) => $s
                     ->where('business_name', 'ilike', "%{$search}%")->orWhere('code', 'ilike', "%{$search}%"))))
             ->with(['client.salesperson:id,name', 'currency:id,code'])
-            ->get()
-            ->map(function (Invoice $invoice) use ($asOf): array {
-                $days = (int) $invoice->due_date->diffInDays($asOf, false);
+            ->get();
 
-                return [
-                    'invoice' => $invoice,
-                    'bucket' => match (true) {
-                        $days <= 0 => 'current',
-                        $days <= 30 => 'd1_30',
-                        $days <= 60 => 'd31_60',
-                        $days <= 90 => 'd61_90',
-                        default => 'd90_plus',
-                    },
-                    'balance' => $invoice->balance,
-                    'base' => Decimal::mul($invoice->balance, $invoice->exchange_rate, Decimal::MONEY),
-                ];
-            });
+        $invoiceIds = $invoices->pluck('id')->all();
+        $debits = DebitNote::query()->whereIn('invoice_id', $invoiceIds)->where('status', 'issued')->whereDate('issue_date', '<=', $asOfDate)
+            ->selectRaw('invoice_id, SUM(total) AS amount')->groupBy('invoice_id')->pluck('amount', 'invoice_id');
+        $credits = CreditNote::query()->whereIn('invoice_id', $invoiceIds)->where('status', 'issued')->whereDate('issue_date', '<=', $asOfDate)
+            ->selectRaw('invoice_id, SUM(applied_amount) AS amount')->groupBy('invoice_id')->pluck('amount', 'invoice_id');
+        $payments = ReceiptApplication::query()->whereIn('invoice_id', $invoiceIds)->whereDate('applied_on', '<=', $asOfDate)
+            ->where(fn (Builder $query) => $query->whereNotNull('credit_note_id')->orWhereHas('receipt', fn (Builder $receipts) => $receipts->where('status', ReceiptStatus::Posted)))
+            ->selectRaw('invoice_id, SUM(amount) AS amount')->groupBy('invoice_id')->pluck('amount', 'invoice_id');
+
+        $invoices = $invoices->map(function (Invoice $invoice) use ($asOf, $debits, $credits, $payments): array {
+            $balance = Decimal::money(Decimal::of($invoice->total)
+                ->plus(Decimal::of((string) ($debits[$invoice->id] ?? '0')))
+                ->minus(Decimal::of((string) ($credits[$invoice->id] ?? '0')))
+                ->minus(Decimal::of((string) ($payments[$invoice->id] ?? '0')))
+                ->minus(Decimal::of($invoice->prior_paid_amount)));
+            $days = (int) $invoice->due_date->diffInDays($asOf, false);
+
+            return [
+                'invoice' => $invoice,
+                'bucket' => match (true) {
+                    $days <= 0 => 'current',
+                    $days <= 30 => 'd1_30',
+                    $days <= 60 => 'd31_60',
+                    $days <= 90 => 'd61_90',
+                    default => 'd90_plus',
+                },
+                'balance' => $balance,
+                'base' => Decimal::mul($balance, $invoice->exchange_rate, Decimal::MONEY),
+            ];
+        })->filter(fn (array $item) => Decimal::cmp($item['balance'], '0') > 0)->values();
 
         $rows = $invoices->groupBy(fn (array $item) => $item['invoice']->client_id.'|'.$item['invoice']->currency->code)
             ->map(function (Collection $items): array {
@@ -132,15 +149,23 @@ class ClientStatementService
         $invoices = Invoice::query()->where('client_id', $client->id)->whereNotNull('issued_at')
             ->whereNot('status', InvoiceStatus::Cancelled)->with('currency:id,code')->get()
             ->map(fn (Invoice $invoice) => [
-                'date' => $invoice->issue_date->toDateString(), 'id' => $invoice->id, 'currency' => $invoice->currency->code,
+                'date' => $invoice->issue_date->toDateString(), 'id' => $invoice->id, 'order' => 0, 'currency' => $invoice->currency->code,
                 'type' => 'invoice', 'type_label' => 'Factura', 'number' => $invoice->number, 'ncf' => $invoice->ncf,
                 'description' => $invoice->kind->label(), 'debit' => Decimal::money($invoice->total), 'credit' => Decimal::money('0'),
+            ]);
+
+        $priorPayments = Invoice::query()->where('client_id', $client->id)->whereNotNull('issued_at')->whereNot('status', InvoiceStatus::Cancelled)
+            ->where('prior_paid_amount', '>', 0)->with('currency:id,code')->get()
+            ->map(fn (Invoice $invoice) => [
+                'date' => $invoice->issue_date->toDateString(), 'id' => $invoice->id, 'order' => 3, 'currency' => $invoice->currency->code,
+                'type' => 'prior_payment', 'type_label' => 'Pagos anteriores', 'number' => $invoice->number, 'ncf' => $invoice->ncf,
+                'description' => 'Pagos recibidos antes del sistema', 'debit' => Decimal::money('0'), 'credit' => Decimal::money($invoice->prior_paid_amount),
             ]);
 
         $debitNotes = DebitNote::query()->whereIn('invoice_id', $clientInvoiceIds)->where('status', 'issued')
             ->with(['currency:id,code', 'invoice:id,number'])->get()
             ->map(fn (DebitNote $note) => [
-                'date' => $note->issue_date->toDateString(), 'id' => $note->id, 'currency' => $note->currency->code,
+                'date' => $note->issue_date->toDateString(), 'id' => $note->id, 'order' => 1, 'currency' => $note->currency->code,
                 'type' => 'debit_note', 'type_label' => 'Nota de débito', 'number' => $note->number, 'ncf' => $note->ncf,
                 'description' => 'Sobre factura '.$note->invoice->number, 'debit' => Decimal::money($note->total), 'credit' => Decimal::money('0'),
             ]);
@@ -148,7 +173,7 @@ class ClientStatementService
         $creditNotes = CreditNote::query()->whereIn('invoice_id', $clientInvoiceIds)->where('status', 'issued')
             ->with(['currency:id,code', 'invoice:id,number'])->get()
             ->map(fn (CreditNote $note) => [
-                'date' => $note->issue_date->toDateString(), 'id' => $note->id, 'currency' => $note->currency->code,
+                'date' => $note->issue_date->toDateString(), 'id' => $note->id, 'order' => 2, 'currency' => $note->currency->code,
                 'type' => 'credit_note', 'type_label' => 'Nota de crédito', 'number' => $note->number, 'ncf' => $note->ncf,
                 'description' => 'Sobre factura '.$note->invoice->number, 'debit' => Decimal::money('0'), 'credit' => Decimal::money($note->total),
             ]);
@@ -157,12 +182,12 @@ class ClientStatementService
             ->whereHas('receipt', fn (Builder $query) => $query->where('client_id', $client->id)->where('status', ReceiptStatus::Posted))
             ->with(['receipt.currency:id,code', 'receipt:id,number,receipt_date,currency_id', 'invoice:id,number'])->get()
             ->map(fn (ReceiptApplication $application) => [
-                'date' => $application->receipt->receipt_date->toDateString(), 'id' => $application->id, 'currency' => $application->receipt->currency->code,
+                'date' => $application->receipt->receipt_date->toDateString(), 'id' => $application->id, 'order' => 4, 'currency' => $application->receipt->currency->code,
                 'type' => 'payment', 'type_label' => 'Cobro', 'number' => $application->receipt->number, 'ncf' => null,
                 'description' => 'Aplicado a factura '.$application->invoice->number, 'debit' => Decimal::money('0'), 'credit' => Decimal::money($application->amount),
             ]);
 
-        return $invoices->concat($debitNotes)->concat($creditNotes)->concat($payments)->values();
+        return $invoices->concat($priorPayments)->concat($debitNotes)->concat($creditNotes)->concat($payments)->values();
     }
 
     /** @param Collection<int, Movement> $movements */

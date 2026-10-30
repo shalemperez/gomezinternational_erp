@@ -49,6 +49,7 @@ use Illuminate\Support\Carbon;
  * @property string $total
  * @property string $total_base
  * @property string $paid_amount
+ * @property string $prior_paid_amount
  * @property string $credited_amount
  * @property string $debited_amount
  * @property string $balance
@@ -67,7 +68,7 @@ class Invoice extends Model implements HasDocumentLines
         'number', 'kind', 'status', 'fiscal_mode', 'ncf', 'ncf_type', 'ncf_expires_on', 'ncf_sequence_id', 'client_id', 'client_name', 'client_tax_id',
         'client_tax_id_type', 'client_address', 'salesperson_id', 'proforma_id', 'warehouse_id', 'currency_id', 'exchange_rate', 'issue_date', 'due_date',
         'payment_terms', 'credit_days', 'subtotal', 'discount_total', 'taxable_total', 'itbis_total', 'additional_tax_total', 'total', 'total_base',
-        'paid_amount', 'credited_amount', 'debited_amount', 'balance', 'dispatch_status', 'notes', 'issued_at', 'sent_at', 'cancelled_at', 'cancelled_by',
+        'paid_amount', 'prior_paid_amount', 'credited_amount', 'debited_amount', 'balance', 'dispatch_status', 'notes', 'issued_at', 'sent_at', 'cancelled_at', 'cancelled_by',
         'cancel_reason', 'created_by',
     ];
 
@@ -79,7 +80,7 @@ class Invoice extends Model implements HasDocumentLines
             'exchange_rate' => 'decimal:6',
             'subtotal' => 'decimal:2', 'discount_total' => 'decimal:2', 'taxable_total' => 'decimal:2', 'itbis_total' => 'decimal:2',
             'additional_tax_total' => 'decimal:2', 'total' => 'decimal:2', 'total_base' => 'decimal:2',
-            'paid_amount' => 'decimal:2', 'credited_amount' => 'decimal:2', 'debited_amount' => 'decimal:2', 'balance' => 'decimal:2',
+            'paid_amount' => 'decimal:2', 'prior_paid_amount' => 'decimal:2', 'credited_amount' => 'decimal:2', 'debited_amount' => 'decimal:2', 'balance' => 'decimal:2',
             'issued_at' => 'datetime', 'sent_at' => 'datetime', 'cancelled_at' => 'datetime',
         ];
     }

@@ -76,6 +76,7 @@ class RegisterHistoricalInvoice
                 'total' => $total,
                 'total_base' => Decimal::mul($total, $rate, Decimal::MONEY),
                 'paid_amount' => $paidAmount,
+                'prior_paid_amount' => $paidAmount,
                 'credited_amount' => '0.00',
                 'debited_amount' => '0.00',
                 'balance' => $total,
@@ -94,7 +95,7 @@ class RegisterHistoricalInvoice
                 'number' => $invoice->number, 'ncf' => $invoice->ncf, 'ncf_type' => $invoice->ncf_type?->value, 'client_id' => $invoice->client_id,
                 'salesperson_id' => $invoice->salesperson_id, 'issue_date' => $invoice->issue_date->toDateString(), 'due_date' => $invoice->due_date->toDateString(),
                 'taxable_total' => $invoice->taxable_total, 'itbis_total' => $invoice->itbis_total, 'additional_tax_total' => $invoice->additional_tax_total,
-                'total' => $invoice->total, 'total_base' => $invoice->total_base, 'paid_amount' => $invoice->paid_amount, 'balance' => $invoice->balance,
+                'total' => $invoice->total, 'total_base' => $invoice->total_base, 'paid_amount' => $invoice->paid_amount, 'prior_paid_amount' => $invoice->prior_paid_amount, 'balance' => $invoice->balance,
                 'currency' => $currency->code, 'exchange_rate' => $rate,
             ], $issueDate);
 

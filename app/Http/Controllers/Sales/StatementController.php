@@ -143,7 +143,7 @@ class StatementController extends Controller
 
     private function asOf(Request $request): CarbonImmutable
     {
-        $request->validate(['as_of' => ['nullable', 'date']]);
+        $request->validate(['as_of' => ['nullable', 'date', 'before_or_equal:today']], ['as_of.before_or_equal' => 'La fecha de corte no puede ser futura.']);
         $asOf = $request->string('as_of')->toString();
 
         return CarbonImmutable::parse($asOf !== '' ? $asOf : 'today')->startOfDay();

@@ -2,7 +2,9 @@
 
 use App\Actions\Sales\CancelInvoice;
 use App\Models\Client;
+use App\Models\Currency;
 use App\Models\Invoice;
+use App\Models\Salesperson;
 use App\Models\SentEmail;
 use App\Services\Sales\ClientStatementService;
 use Carbon\CarbonImmutable;
@@ -18,23 +20,23 @@ beforeEach(function () {
     (new EmailTemplateSeeder)->run();
 });
 
-function openInvoiceDue(Client $client, string $dueDate, string $paid = '0'): Invoice
+function openInvoiceDue(Client $client, string $dueDate): Invoice
 {
     $i = issuedInvoice(['client_id' => $client->id]);
-    Invoice::query()->whereKey($i->id)->update(['due_date' => $dueDate, 'paid_amount' => $paid]); // query builder: bypasses the immutability guard on purpose (test fixture)
-    $i = $i->fresh();
-    $i->refreshFinancials();
+    Invoice::query()->whereKey($i->id)->update(['due_date' => $dueDate]); // query builder: bypasses the immutability guard on purpose (test fixture)
 
     return $i->fresh();
 }
 
 test('aging buckets open balances by days overdue and sums in base currency', function () {
+    $this->travelTo(CarbonImmutable::parse('2026-11-30 10:00'));
     actingAsRole('accounting');
     $client = Client::factory()->create(['business_name' => 'Aged SRL']);
     $asOf = CarbonImmutable::parse('2026-11-30');
     openInvoiceDue($client, '2026-12-05');            // current
     openInvoiceDue($client, '2026-11-15');            // 15 days
-    openInvoiceDue($client, '2026-10-15', '36.00');   // 46 days, balance 200
+    $partly = openInvoiceDue($client, '2026-10-15');  // 46 days, balance 200 after a 36.00 receipt
+    $this->post(route('sales.receipts.store'), validReceiptPayload($partly, ['amount_received' => '36', 'applications' => [['invoice_id' => $partly->id, 'amount' => '36']]]))->assertRedirect();
     openInvoiceDue($client, '2026-09-10');            // 81 days
     openInvoiceDue($client, '2026-07-01');            // 152 days
     $cancelled = openInvoiceDue($client, '2026-07-01');
@@ -45,6 +47,42 @@ test('aging buckets open balances by days overdue and sums in base currency', fu
     expect($row['current'])->toBe('236.00')->and($row['d1_30'])->toBe('236.00')->and($row['d31_60'])->toBe('200.00')->and($row['d61_90'])->toBe('236.00')->and($row['d90_plus'])->toBe('236.00')
         ->and($row['total'])->toBe('1144.00')->and($row['total_base'])->toBe('1144.00')->and($aging['totals']['total_base'])->toBe('1144.00');
     $this->get(route('sales.statements.index', ['as_of' => '2026-11-30']))->assertOk()->assertInertia(fn ($p) => $p->component('sales/statements/index')->where('aging.rows.0.client_name', 'Aged SRL')->where('aging.rows.0.d90_plus', '236.00'));
+    $this->travelBack();
+});
+
+test('historical invoices show their prior payments as a credit row in the statement and the aging', function () {
+    actingAsRole('accounting');
+    $client = Client::factory()->create(['salesperson_id' => Salesperson::factory()->create()->id]);
+    $this->post(route('sales.invoices.historical.store'), ['ncf' => 'B0100000777', 'client_id' => $client->id, 'salesperson_id' => '', 'issue_date' => '2026-08-01', 'due_date' => '', 'currency_id' => Currency::base()->id, 'taxable_total' => '10000', 'itbis_total' => '1800', 'total' => '11800', 'paid_amount' => '1800', 'notes' => ''])->assertRedirect();
+    $i = Invoice::firstOrFail();
+    expect($i->prior_paid_amount)->toBe('1800.00')->and($i->paid_amount)->toBe('1800.00')->and($i->balance)->toBe('10000.00');
+
+    $s = app(ClientStatementService::class)->statement($client, CarbonImmutable::parse('2026-08-01'), CarbonImmutable::parse('2026-08-31'));
+    $rows = $s['DOP']['rows'];
+    expect($rows)->toHaveCount(2)->and($rows[0]['type'])->toBe('invoice')->and($rows[0]['debit'])->toBe('11800.00')
+        ->and($rows[1]['type'])->toBe('prior_payment')->and($rows[1]['type_label'])->toBe('Pagos anteriores')->and($rows[1]['credit'])->toBe('1800.00')->and($rows[1]['balance'])->toBe('10000.00')
+        ->and($s['DOP']['closing_balance'])->toBe('10000.00');
+
+    $aging = collect(app(ClientStatementService::class)->aging(auth()->user(), CarbonImmutable::parse('2026-08-15'))['rows'])->firstWhere('client_id', $client->id);
+    expect($aging['total'])->toBe('10000.00')->and($aging['current'])->toBe('10000.00');
+});
+
+test('aging as of a past date ignores later invoices and payments and refuses a future cut-off', function () {
+    actingAsRole('accounting');
+    $client = Client::factory()->create();
+    $this->travelTo(CarbonImmutable::parse('2026-09-01 10:00'));
+    $old = issuedInvoice(['client_id' => $client->id]); // 236.00, due 2026-10-01
+    $this->travelTo(CarbonImmutable::parse('2026-10-20 10:00'));
+    $this->post(route('sales.receipts.store'), validReceiptPayload($old, ['receipt_date' => '2026-10-20', 'amount_received' => '100', 'applications' => [['invoice_id' => $old->id, 'amount' => '100']]]))->assertRedirect();
+    issuedInvoice(['client_id' => $client->id]); // 236.00, issued 2026-10-20
+    $this->travelBack();
+
+    $svc = app(ClientStatementService::class);
+    $atSep30 = collect($svc->aging(auth()->user(), CarbonImmutable::parse('2026-09-30'))['rows'])->firstWhere('client_id', $client->id);
+    expect($atSep30['total'])->toBe('236.00')->and($atSep30['current'])->toBe('236.00');
+    $atOct25 = collect($svc->aging(auth()->user(), CarbonImmutable::parse('2026-10-25'))['rows'])->firstWhere('client_id', $client->id);
+    expect($atOct25['total'])->toBe('372.00')->and($atOct25['d1_30'])->toBe('136.00')->and($atOct25['current'])->toBe('236.00');
+    $this->get(route('sales.statements.index', ['as_of' => now()->addDay()->toDateString()]))->assertSessionHasErrors(['as_of' => 'La fecha de corte no puede ser futura.']);
 });
 
 test('statement lists invoices, notes and payments with a running balance per currency', function () {
