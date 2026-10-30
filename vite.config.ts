@@ -77,6 +77,7 @@ export default defineConfig({
             'boost.json',
             '.mcp.json',
             'docker-compose.yml',
+            'README.md',
         ],
         sortTailwindcss: {
             functions: ['clsx', 'cn', 'cva'],

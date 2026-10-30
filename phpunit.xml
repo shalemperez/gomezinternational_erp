@@ -36,6 +36,7 @@
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
+        <env name="TRUSTED_PROXIES" value="*"/>
         <env name="GOOGLE_WORKSPACE_DOMAIN" value="empresa.test"/>
         <env name="SUPER_ADMIN_EMAILS" value="soporte@externo.test"/>
     </php>

@@ -4,6 +4,9 @@ use App\Actions\Admin\SyncSuperAdmins;
 use App\Models\User;
 use App\Support\PermissionCatalog;
 use Database\Seeders\PermissionSeeder;
+use Illuminate\Database\Events\TransactionBeginning;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -65,4 +68,11 @@ test('shared props expose roles and permissions', function () {
         ->where('auth.impersonator', null)
         ->has('auth.permissions')
         ->where('flash.success', null));
+});
+
+test('seeder runs inside a database transaction', function () {
+    Event::fake([TransactionBeginning::class]);
+    DB::connection()->setEventDispatcher(app('events'));
+    (new PermissionSeeder)->run();
+    Event::assertDispatched(TransactionBeginning::class);
 });

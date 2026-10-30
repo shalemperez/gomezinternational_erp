@@ -2,6 +2,7 @@
 
 use App\Models\User;
 use App\Notifications\UserInvited;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Support\Facades\Notification;
 use Spatie\Activitylog\Models\Activity;
 
@@ -132,4 +133,9 @@ test('the form only offers roles the actor can assign', function () {
 
     $this->get(route('admin.users.create'))->assertOk()->assertInertia(fn ($p) => $p
         ->where('roleOptions', fn ($options) => collect($options)->pluck('name')->doesntContain('owner') && collect($options)->pluck('name')->doesntContain('super-admin')));
+});
+
+test('the invitation is queued after commit', function () {
+    $notification = new UserInvited;
+    expect($notification)->toBeInstanceOf(ShouldQueue::class)->and($notification->afterCommit)->toBeTrue();
 });
