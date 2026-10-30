@@ -86,6 +86,7 @@ class InvoiceController extends Controller
 
         return Inertia::render('sales/invoices/show', [
             'invoice' => $this->invoiceProps($invoice, $user),
+            'ecf' => $invoice->fiscal_mode === 'ecf' ? $invoice->ecfDocument?->summary() : null,
             'history' => AuditHistory::for($invoice),
             'emails' => $this->emailRows($invoice),
             'dispatches' => $this->dispatchRows($invoice),

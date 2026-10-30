@@ -109,4 +109,28 @@ class EcfDocument extends Model
     {
         return $this->status->label();
     }
+
+    /**
+     * @return array{id: int, encf: string, status: string, status_label: string, flow: string, track_id: string|null, security_code: string|null, signed_at: string|null, qr_url: string|null, dgii_messages: array<int, array{codigo: string, valor: string}>|null, last_error: string|null, attempts: int, next_attempt_at: string|null, is_valid: bool, show_url: string}
+     */
+    public function summary(): array
+    {
+        return [
+            'id' => $this->id,
+            'encf' => $this->encf,
+            'status' => $this->status->value,
+            'status_label' => $this->status->label(),
+            'flow' => $this->flow,
+            'track_id' => $this->track_id,
+            'security_code' => $this->security_code,
+            'signed_at' => $this->signed_at?->toIso8601String(),
+            'qr_url' => $this->qr_url,
+            'dgii_messages' => $this->dgii_messages,
+            'last_error' => $this->last_error,
+            'attempts' => $this->attempts,
+            'next_attempt_at' => $this->next_attempt_at?->toIso8601String(),
+            'is_valid' => $this->status->isValidForTax(),
+            'show_url' => route('fiscal.ecf-documents.show', $this),
+        ];
+    }
 }

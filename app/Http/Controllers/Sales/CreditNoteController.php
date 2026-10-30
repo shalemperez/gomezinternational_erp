@@ -88,6 +88,7 @@ class CreditNoteController extends Controller
 
         return Inertia::render('sales/credit-notes/show', [
             'creditNote' => [...Arr::except($creditNote->toArray(), $canViewCosts ? [] : ['returned_cost']), 'reason_label' => $creditNote->reason->label(), 'ncf_type_label' => $creditNote->ncf_type->label()],
+            'ecf' => $creditNote->fiscal_mode === 'ecf' ? $creditNote->ecfDocument?->summary() : null,
             'history' => AuditHistory::for($creditNote),
             'openInvoices' => Invoice::query()->visibleTo($this->actor($request))->where('client_id', $creditNote->client_id)->where('currency_id', $creditNote->currency_id)
                 ->whereIn('status', [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid])->orderBy('issue_date')

@@ -30,7 +30,7 @@ class EcfRejected extends Notification implements ShouldQueue
             ->line('Comprobante: '.$this->document->document?->getAttribute('number'))
             ->line("e-NCF: {$this->document->encf}")
             ->line('Mensaje de la DGII: '.($this->document->dgii_messages[0]['valor'] ?? ''))
-            ->action('Ver e-CF', url('/fiscal/ecf-documents/'.$this->document->id));
+            ->action('Ver e-CF', route('fiscal.ecf-documents.show', $this->document));
     }
 
     /** @return array<string, mixed> */

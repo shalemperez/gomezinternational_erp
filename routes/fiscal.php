@@ -1,0 +1,14 @@
+<?php
+
+use App\Http\Controllers\Fiscal\EcfDocumentController;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware(['auth'])->prefix('fiscal')->name('fiscal.')->group(function () {
+    Route::get('ecf-documents/export', [EcfDocumentController::class, 'export'])->name('ecf-documents.export');
+    Route::get('ecf-documents', [EcfDocumentController::class, 'index'])->name('ecf-documents.index');
+    Route::get('ecf-documents/{ecfDocument}', [EcfDocumentController::class, 'show'])->name('ecf-documents.show');
+    Route::post('ecf-documents/{ecfDocument}/retry', [EcfDocumentController::class, 'retry'])->name('ecf-documents.retry');
+    Route::post('ecf-documents/{ecfDocument}/poll', [EcfDocumentController::class, 'poll'])->name('ecf-documents.poll');
+    Route::get('ecf-documents/{ecfDocument}/xml', [EcfDocumentController::class, 'xml'])->name('ecf-documents.xml');
+    Route::get('ecf-documents/{ecfDocument}/transmissions/{transmission}', [EcfDocumentController::class, 'transmission'])->name('ecf-documents.transmission');
+});

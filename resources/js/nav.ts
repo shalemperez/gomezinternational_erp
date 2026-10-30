@@ -6,6 +6,7 @@ import {
     CalendarClock,
     ClipboardList,
     Coins,
+    FileBadge,
     FileMinus,
     FilePlus,
     FileSpreadsheet,
@@ -197,6 +198,17 @@ export const navGroups: NavGroup[] = [
                 href: '/inventory/initial-stock',
                 icon: PackagePlus,
                 permission: 'inventory.initial-stock.import',
+            },
+        ],
+    },
+    {
+        label: 'Fiscal',
+        items: [
+            {
+                title: 'Comprobantes electrónicos',
+                href: '/fiscal/ecf-documents',
+                icon: FileBadge,
+                permission: 'fiscal.ecf.view',
             },
         ],
     },

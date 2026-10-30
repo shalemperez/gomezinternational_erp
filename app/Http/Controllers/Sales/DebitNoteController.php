@@ -80,6 +80,7 @@ class DebitNoteController extends Controller
 
         return Inertia::render('sales/debit-notes/show', [
             'debitNote' => [...$debitNote->toArray(), 'reason_label' => $debitNote->reason->label(), 'ncf_type_label' => $debitNote->ncf_type->label()],
+            'ecf' => $debitNote->fiscal_mode === 'ecf' ? $debitNote->ecfDocument?->summary() : null,
             'history' => AuditHistory::for($debitNote),
         ]);
     }
