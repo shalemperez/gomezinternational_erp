@@ -3,6 +3,9 @@
 namespace App\Http\Requests\Admin;
 
 use App\Enums\NcfType;
+use App\Models\CreditNote;
+use App\Models\DebitNote;
+use App\Models\Invoice;
 use App\Models\NcfSequence;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -67,6 +70,28 @@ class StoreNcfSequenceRequest extends FormRequest
             if ($overlaps) {
                 $v->errors()->add('range_from', 'El rango se solapa con otra secuencia del mismo tipo.');
             }
+            $used = $this->firstUsedNcfInRange($type, $this->integer('range_from'), $this->integer('range_to'), $currentId);
+            if ($used !== null) {
+                $v->errors()->add('range_from', "El rango incluye el NCF {$used}, ya emitido; inicia la secuencia después del último NCF usado.");
+            }
         });
+    }
+
+    /** Lowest NCF of this type inside the range that was not issued by this sequence (historical, imported or another sequence). */
+    private function firstUsedNcfInRange(NcfType $type, int $from, int $to, ?int $excludeSequenceId): ?string
+    {
+        $found = [];
+        foreach ([Invoice::class, CreditNote::class, DebitNote::class] as $model) {
+            $ncf = $model::query()->where('ncf_type', $type->value)
+                ->whereRaw('CAST(SUBSTR(ncf, 4) AS INTEGER) BETWEEN ? AND ?', [$from, $to])
+                ->when($excludeSequenceId !== null, fn ($query) => $query->where(fn ($q) => $q->whereNull('ncf_sequence_id')->orWhere('ncf_sequence_id', '!=', $excludeSequenceId)))
+                ->orderBy('ncf')->value('ncf');
+            if ($ncf !== null) {
+                $found[] = (string) $ncf;
+            }
+        }
+        sort($found);
+
+        return $found[0] ?? null;
     }
 }

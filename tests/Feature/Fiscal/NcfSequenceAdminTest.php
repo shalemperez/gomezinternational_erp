@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\CheckNcfSequences;
+use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Notifications\NcfSequenceAlert;
 use App\Services\Fiscal\SequenceAlerts;
@@ -85,4 +86,15 @@ test('a sequence expiring today is still usable and not reported as expired', fu
     activeSequence('B01', ['range_from' => 1, 'range_to' => 1000, 'next_number' => 1, 'expires_on' => today()->toDateString()]);
     $alerts = collect(app(SequenceAlerts::class)->current())->where('ncf_type', 'B01');
     expect($alerts->where('reason', 'expired'))->toHaveCount(0);
+});
+
+test('a sequence range cannot include ncfs already used by invoices outside it', function () {
+    actingAsRole('owner');
+    Invoice::factory()->create(['kind' => 'historical', 'status' => 'issued', 'fiscal_mode' => 'external', 'ncf' => 'B0100000123', 'ncf_type' => 'B01', 'issued_at' => now()]);
+    $this->post(route('admin.ncf-sequences.store'), validNcfSequencePayload(['range_from' => 1, 'range_to' => 200]))
+        ->assertSessionHasErrors(['range_from' => 'El rango incluye el NCF B0100000123, ya emitido; inicia la secuencia después del último NCF usado.']);
+    $this->post(route('admin.ncf-sequences.store'), validNcfSequencePayload(['range_from' => 124, 'range_to' => 200]))->assertRedirect(route('admin.ncf-sequences.index'));
+    $seq = NcfSequence::firstOrFail();
+    Invoice::factory()->create(['status' => 'issued', 'fiscal_mode' => 'ncf', 'ncf' => 'B0100000124', 'ncf_type' => 'B01', 'ncf_sequence_id' => $seq->id, 'issued_at' => now()]);
+    $this->put(route('admin.ncf-sequences.update', $seq), validNcfSequencePayload(['range_from' => 124, 'range_to' => 300]))->assertRedirect(route('admin.ncf-sequences.index')); // its own NCFs do not collide
 });

@@ -2,6 +2,7 @@
 
 use App\Enums\NcfType;
 use App\Exceptions\FiscalNumberingException;
+use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Services\Fiscal\FiscalNumberingService;
 use Illuminate\Database\QueryException;
@@ -65,4 +66,12 @@ test('non-expiring types never report an expiry date even when the sequence has 
     activeSequence('B02', ['expires_on' => '2030-12-31']);
     $n = app(FiscalNumberingService::class)->assign(NcfType::B02, Carbon::today());
     expect($n->ncf)->toBe('B0200000001')->and($n->expiresOn)->toBeNull();
+});
+
+test('an ncf already used by a historical invoice is refused instead of crashing', function () {
+    $seq = activeSequence('B01', ['range_from' => 1, 'range_to' => 100]);
+    Invoice::factory()->create(['kind' => 'historical', 'status' => 'issued', 'fiscal_mode' => 'external', 'ncf' => 'B0100000001', 'ncf_type' => 'B01', 'issued_at' => now()]);
+    expect(fn () => app(FiscalNumberingService::class)->assign(NcfType::B01, Carbon::today()))
+        ->toThrow(FiscalNumberingException::class, 'El NCF B0100000001 ya existe (factura histórica o importada); ajusta el inicio de la secuencia B01 para continuar después del último NCF usado.');
+    expect($seq->fresh()->next_number)->toBe(1);
 });

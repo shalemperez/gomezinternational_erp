@@ -4,6 +4,9 @@ namespace App\Services\Fiscal;
 
 use App\Enums\NcfType;
 use App\Exceptions\FiscalNumberingException;
+use App\Models\CreditNote;
+use App\Models\DebitNote;
+use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Services\Settings;
 use App\Support\Fiscal\FiscalNumber;
@@ -37,6 +40,10 @@ class FiscalNumberingService
                 throw new FiscalNumberingException("La secuencia de {$type->value} está agotada; registra una nueva secuencia autorizada por la DGII.");
             }
             $number = $usable->next_number;
+            $ncf = $type->value.str_pad((string) $number, 8, '0', STR_PAD_LEFT);
+            if ($this->ncfExists($ncf)) {
+                throw new FiscalNumberingException("El NCF {$ncf} ya existe (factura histórica o importada); ajusta el inicio de la secuencia {$type->value} para continuar después del último NCF usado.");
+            }
             $usable->next_number = $number + 1;
             if ($usable->next_number > $usable->range_to) {
                 $usable->exhausted_at = now();
@@ -47,12 +54,17 @@ class FiscalNumberingService
             }
 
             return new FiscalNumber(
-                $type->value.str_pad((string) $number, 8, '0', STR_PAD_LEFT),
+                $ncf,
                 $type,
                 $type->expires() && $usable->expires_on ? CarbonImmutable::parse($usable->expires_on) : null,
                 $usable->id,
             );
         });
+    }
+
+    private function ncfExists(string $ncf): bool
+    {
+        return Invoice::query()->where('ncf', $ncf)->exists() || CreditNote::query()->where('ncf', $ncf)->exists() || DebitNote::query()->where('ncf', $ncf)->exists();
     }
 
     private function isExpired(NcfSequence $s, NcfType $type, CarbonInterface $issueDate): bool
