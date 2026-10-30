@@ -173,4 +173,10 @@ class Invoice extends Model implements HasDocumentLines
     {
         return $this->hasMany(CreditNote::class);
     }
+
+    /** @return HasMany<DebitNote, $this> */
+    public function debitNotes(): HasMany
+    {
+        return $this->hasMany(DebitNote::class);
+    }
 }
