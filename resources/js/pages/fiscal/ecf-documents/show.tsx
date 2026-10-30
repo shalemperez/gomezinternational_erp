@@ -1,8 +1,9 @@
 import { Head, Link } from '@inertiajs/react';
-import { EcfStatusCard } from '@/components/erp/ecf-status-card';
+import { EcfStatusCard, Field } from '@/components/erp/ecf-status-card';
 import { PageHeader } from '@/components/erp/page-header';
 import { RecordHistory } from '@/components/erp/record-history';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Table,
     TableBody,
@@ -60,7 +61,61 @@ export default function EcfDocumentShow({
                     }
                 />
 
-                <EcfStatusCard ecf={ecfDocument} canManage={abilities.manage} />
+                <EcfStatusCard
+                    ecf={ecfDocument}
+                    canManage={abilities.manage}
+                    hideOpenLink
+                />
+
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Respuesta de la DGII</CardTitle>
+                    </CardHeader>
+                    <CardContent className="flex flex-col gap-4">
+                        <dl className="grid gap-3 text-sm md:grid-cols-3">
+                            <Field
+                                label="Código DGII"
+                                value={
+                                    ecfDocument.dgii_code === null
+                                        ? null
+                                        : String(ecfDocument.dgii_code)
+                                }
+                            />
+                            {ecfDocument.commercial_status && (
+                                <Field
+                                    label="Aprobación comercial"
+                                    value={ecfDocument.commercial_status}
+                                />
+                            )}
+                            {ecfDocument.commercial_reason && (
+                                <Field
+                                    label="Motivo"
+                                    value={ecfDocument.commercial_reason}
+                                />
+                            )}
+                        </dl>
+                        {ecfDocument.dgii_messages &&
+                            ecfDocument.dgii_messages.length > 0 && (
+                                <div className="text-sm">
+                                    <p className="text-muted-foreground">
+                                        Mensajes de la DGII
+                                    </p>
+                                    <ul className="list-disc pl-5 font-mono break-all">
+                                        {ecfDocument.dgii_messages.map(
+                                            (message, index) => (
+                                                <li key={index}>
+                                                    {message.codigo
+                                                        ? `${message.codigo}: `
+                                                        : ''}
+                                                    {message.valor}
+                                                </li>
+                                            ),
+                                        )}
+                                    </ul>
+                                </div>
+                            )}
+                    </CardContent>
+                </Card>
 
                 <Tabs defaultValue="transmisiones">
                     <TabsList>

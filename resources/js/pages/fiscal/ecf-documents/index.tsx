@@ -66,9 +66,9 @@ export default function EcfDocumentIndex({ rows, filters, statuses }: Props) {
             key: 'document',
             label: 'Documento',
             render: (row) => (
-                <a className="underline" href={row.document.url}>
+                <Link className="underline" href={row.document.url}>
                     {row.document.number}
-                </a>
+                </Link>
             ),
         },
         {

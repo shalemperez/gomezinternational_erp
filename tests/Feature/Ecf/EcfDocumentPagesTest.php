@@ -95,3 +95,13 @@ test('a transmission response is returned as json to users who can view the docu
     $transmission = $doc->transmissions()->firstOrFail();
     $this->get(route('fiscal.ecf-documents.transmission', [$doc, $transmission]))->assertOk()->assertJsonPath('response.fake', true)->assertJsonPath('http_status', 200);
 });
+
+test('poll on a sent e-cf runs synchronously and flashes the new status', function () {
+    ecfMode(outcome: 'unavailable');
+    $doc = issuedInvoice()->ecfDocument;
+    $doc->forceFill(['status' => EcfStatus::Sent, 'track_id' => 'TRACK-1'])->save();
+    app(Settings::class)->set('ecf.fake.outcome', 'accepted');
+    actingAsRole('accounting');
+    $this->post(route('fiscal.ecf-documents.poll', $doc))->assertRedirect()->assertSessionHas('success', 'Consulta ejecutada: Aceptado');
+    expect($doc->fresh()->status)->toBe(EcfStatus::Accepted);
+});
