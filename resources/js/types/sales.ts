@@ -317,6 +317,7 @@ export type Receipt = {
     amount_received: string;
     retention_itbis: string;
     retention_isr: string;
+    retention_total?: string;
     applied_total: string;
     unapplied_amount: string;
     notes: string | null;

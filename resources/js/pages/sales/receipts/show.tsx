@@ -86,13 +86,7 @@ export default function ReceiptShow({
         },
         {
             label: 'Retenciones',
-            value: formatMoney(
-                String(
-                    Number(receipt.retention_itbis) +
-                        Number(receipt.retention_isr),
-                ),
-                currency,
-            ),
+            value: formatMoney(receipt.retention_total ?? '0.00', currency),
         },
         {
             label: 'Aplicado',

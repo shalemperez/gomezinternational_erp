@@ -36,6 +36,7 @@ Route::middleware(['auth'])->prefix('sales')->name('sales.')->group(function () 
     Route::get('receipts/{receipt}/pdf', [ReceiptController::class, 'pdf'])->name('receipts.pdf');
     Route::post('receipts/{receipt}/cancel', [ReceiptController::class, 'cancel'])->name('receipts.cancel');
     Route::post('receipts/{receipt}/apply', [ReceiptController::class, 'apply'])->name('receipts.apply');
+    Route::post('receipts/preview', [ReceiptController::class, 'preview'])->name('receipts.preview');
     Route::resource('receipts', ReceiptController::class)->only(['index', 'create', 'store', 'show']);
 
     Route::get('statements', [StatementController::class, 'index'])->name('statements.index');

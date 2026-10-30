@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { formatDate, formatMoney } from '@/lib/format';
+import { useReceiptPreview } from '@/hooks/use-receipt-preview';
 import { create, index, store } from '@/routes/sales/receipts';
 import type { OpenInvoiceRow, PickedClient } from '@/types/sales';
 
@@ -39,6 +40,7 @@ type Props = {
     accounts: { id: number; name: string; type: string; currency_id: number }[];
     paymentMethods: { value: string; label: string }[];
     currencies: { id: number; code: string; name: string; is_base: boolean }[];
+    advanceTotals: Record<string, string>;
 };
 
 type ApplicationRow = {
@@ -74,10 +76,10 @@ const applicationRowsFor = (
 export default function ReceiptForm({
     client,
     openInvoices,
-    advances,
     accounts,
     paymentMethods,
     currencies,
+    advanceTotals,
 }: Props) {
     const { url } = usePage();
     const preselectedInvoiceId = Number(
@@ -134,13 +136,8 @@ export default function ReceiptForm({
     const currencyInvoiceIds = new Set(
         currencyInvoices.map((invoice) => invoice.id),
     );
-    const currencyAdvances = advances.filter(
-        (advance) => advance.currency_id === data.currency_id,
-    );
-    const advanceTotal = currencyAdvances.reduce(
-        (sum, advance) => sum + Number(advance.unapplied_amount),
-        0,
-    );
+    const advanceTotal =
+        advanceTotals[String(data.currency_id ?? '')] ?? '0.00';
 
     const applicationByInvoice = new Map(
         data.applications.map((application) => [
@@ -153,14 +150,15 @@ export default function ReceiptForm({
             application.selected &&
             currencyInvoiceIds.has(application.invoice_id),
     );
-    const appliedTotal = selectedApplications.reduce(
-        (sum, application) => sum + Number(application.amount || 0),
-        0,
-    );
-    const creditTotal =
-        Number(data.amount_received || 0) +
-        Number(data.retention_itbis || 0) +
-        Number(data.retention_isr || 0);
+    const summary = useReceiptPreview({
+        amount_received: data.amount_received,
+        retention_itbis: data.retention_itbis,
+        retention_isr: data.retention_isr,
+        applications: selectedApplications.map(({ invoice_id, amount }) => ({
+            invoice_id,
+            amount,
+        })),
+    });
 
     const updateApplication = (
         invoiceId: number,
@@ -424,12 +422,13 @@ export default function ReceiptForm({
                     </FormField>
                 </div>
 
-                {currencyAdvances.length > 0 && (
+                {advanceTotal !== '0.00' && (
                     <Alert>
                         <AlertDescription>
-                            Este cliente tiene anticipos por{' '}
-                            {formatMoney(advanceTotal, currency)} — aplícalos
-                            desde el recibo correspondiente.
+                            Este cliente tiene saldo a favor por{' '}
+                            {formatMoney(advanceTotal, currency)} — aplícalo
+                            desde el recibo o la nota de crédito
+                            correspondiente.
                         </AlertDescription>
                     </Alert>
                 )}
@@ -542,11 +541,15 @@ export default function ReceiptForm({
                 <dl className="ml-auto grid w-full max-w-sm grid-cols-2 gap-x-4 text-sm">
                     <dt className="text-muted-foreground">Σ aplicado</dt>
                     <dd className="text-right">
-                        {formatMoney(appliedTotal, currency)}
+                        {summary
+                            ? formatMoney(summary.applied_total, currency)
+                            : '—'}
                     </dd>
                     <dt className="text-muted-foreground">Saldo a favor</dt>
                     <dd className="text-right">
-                        {formatMoney(creditTotal - appliedTotal, currency)}
+                        {summary
+                            ? formatMoney(summary.unapplied_amount, currency)
+                            : '—'}
                     </dd>
                 </dl>
                 <p className="text-xs text-muted-foreground">

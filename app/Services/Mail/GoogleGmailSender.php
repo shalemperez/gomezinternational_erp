@@ -26,7 +26,7 @@ class GoogleGmailSender implements GmailSender
         $client->setAccessType('offline');
         $token = $client->fetchAccessTokenWithRefreshToken($sender->gmail_refresh_token);
         if (isset($token['error'])) {
-            throw new \RuntimeException('Google rechazó el token de Gmail: '.$token['error']);
+            throw new GmailNotConnectedException('Google rechazó la conexión con Gmail ('.$token['error'].'). Reconecta tu cuenta de Gmail.');
         }
         $client->setAccessToken($token);
 

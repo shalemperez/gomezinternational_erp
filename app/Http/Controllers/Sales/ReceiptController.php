@@ -12,6 +12,7 @@ use App\Exports\TableExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sales\ApplyAdvanceRequest;
 use App\Http\Requests\Sales\CancelReceiptRequest;
+use App\Http\Requests\Sales\ReceiptPreviewRequest;
 use App\Http\Requests\Sales\StoreReceiptRequest;
 use App\Models\Client;
 use App\Models\Currency;
@@ -20,10 +21,12 @@ use App\Models\Invoice;
 use App\Models\Receipt;
 use App\Models\User;
 use App\Services\Documents\DocumentPdf;
+use App\Services\Sales\ClientAccount;
 use App\Support\AuditHistory;
 use App\Support\Money\Decimal;
 use App\Support\TableQuery;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Middleware;
@@ -77,6 +80,7 @@ class ReceiptController extends Controller
             'accounts' => FinancialAccount::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'type', 'currency_id']),
             'paymentMethods' => $this->paymentMethodOptions(),
             'currencies' => Currency::query()->where('is_active', true)->orderBy('code')->get(['id', 'code', 'name', 'is_base']),
+            'advanceTotals' => Currency::query()->where('is_active', true)->get()->mapWithKeys(fn (Currency $currency) => [(string) $currency->id => $client === null ? '0.00' : ClientAccount::advanceBalance($client, $currency)])->all(),
         ]);
     }
 
@@ -88,6 +92,20 @@ class ReceiptController extends Controller
         return redirect()->route('sales.receipts.show', $receipt)->with('success', "Recibo {$receipt->number} registrado");
     }
 
+    #[Middleware('permission:sales.receipts.create')]
+    public function preview(ReceiptPreviewRequest $request): JsonResponse
+    {
+        $money = fn (mixed $value): string => is_numeric($value) ? Decimal::money((string) $value) : '0.00';
+        $credit = Decimal::sum([$money($request->input('amount_received')), $money($request->input('retention_itbis')), $money($request->input('retention_isr'))]);
+        $applied = Decimal::sum(array_map(fn (array $application) => $money($application['amount'] ?? null), $request->validated('applications')));
+
+        return response()->json([
+            'credit_total' => $credit,
+            'applied_total' => $applied,
+            'unapplied_amount' => Decimal::money(Decimal::of($credit)->minus(Decimal::of($applied))),
+        ]);
+    }
+
     #[Middleware('permission:sales.receipts.view')]
     public function show(Request $request, Receipt $receipt): Response
     {
@@ -97,7 +115,7 @@ class ReceiptController extends Controller
         $isPosted = $receipt->status === ReceiptStatus::Posted;
 
         return Inertia::render('sales/receipts/show', [
-            'receipt' => [...$receipt->toArray(), 'status_label' => $receipt->status->label(), 'payment_method_label' => $receipt->payment_method->label()],
+            'receipt' => [...$receipt->toArray(), 'status_label' => $receipt->status->label(), 'payment_method_label' => $receipt->payment_method->label(), 'retention_total' => Decimal::sum([$receipt->retention_itbis, $receipt->retention_isr])],
             'openInvoices' => $this->openInvoices($actor, $receipt->client_id, $receipt->currency_id),
             'history' => AuditHistory::for($receipt),
             'can' => [

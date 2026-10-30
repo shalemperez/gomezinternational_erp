@@ -17,6 +17,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useReceiptPreview } from '@/hooks/use-receipt-preview';
 import { formatDate, formatMoney } from '@/lib/format';
 import type { OpenInvoiceRow } from '@/types/sales';
 
@@ -43,15 +44,17 @@ export function ApplyAdvanceDialog({
     const [processing, setProcessing] = useState(false);
 
     const applications = openInvoices
-        .filter((invoice) => Number(amounts[invoice.id] ?? 0) > 0)
+        .filter((invoice) => (amounts[invoice.id] ?? '').trim() !== '')
         .map((invoice) => ({
             invoice_id: invoice.id,
             amount: amounts[invoice.id],
         }));
-    const applied = applications.reduce(
-        (sum, application) => sum + Number(application.amount),
-        0,
-    );
+    const summary = useReceiptPreview({
+        amount_received: '0',
+        retention_itbis: '0',
+        retention_isr: '0',
+        applications,
+    });
 
     const submit = () => {
         setProcessing(true);
@@ -137,7 +140,10 @@ export function ApplyAdvanceDialog({
                     </Table>
                 </div>
                 <p className="text-sm">
-                    Total a aplicar: {formatMoney(applied, currency)}
+                    Total a aplicar:{' '}
+                    {summary
+                        ? formatMoney(summary.applied_total, currency)
+                        : '—'}
                 </p>
                 <DialogFooter>
                     <Button

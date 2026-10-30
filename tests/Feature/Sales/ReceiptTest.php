@@ -115,6 +115,14 @@ test('permissions and scoping: sales can view own receipts but not create or can
     $this->get(route('sales.receipts.index'))->assertInertia(fn ($p) => $p->has('rows.data', 0));
     actingAsRole('management');
     $this->get(route('sales.receipts.index'))->assertInertia(fn ($p) => $p->component('sales/receipts/index')->has('rows.data', 1));
-    $this->get(route('sales.receipts.show', $r))->assertInertia(fn ($p) => $p->component('sales/receipts/show')->has('receipt.applications', 1)->where('receipt.financial_account.name', $r->financialAccount->name)->has('history'));
+    $this->get(route('sales.receipts.show', $r))->assertInertia(fn ($p) => $p->component('sales/receipts/show')->has('receipt.applications', 1)->where('receipt.financial_account.name', $r->financialAccount->name)->where('receipt.retention_total', '0.00')->has('history'));
     $this->get(route('sales.receipts.export', ['format' => 'csv']))->assertOk();
+});
+
+test('the receipt preview sums applications and retentions on the server', function () {
+    actingAsRole('accounting');
+    $this->postJson(route('sales.receipts.preview'), ['amount_received' => '100.10', 'retention_itbis' => '0.20', 'retention_isr' => '', 'applications' => [['invoice_id' => 1, 'amount' => '50.05'], ['invoice_id' => 2, 'amount' => '0.05']]])
+        ->assertOk()->assertJson(['credit_total' => '100.30', 'applied_total' => '50.10', 'unapplied_amount' => '50.20']);
+    actingAsRole('sales');
+    $this->postJson(route('sales.receipts.preview'), ['applications' => []])->assertForbidden();
 });

@@ -8,6 +8,7 @@ use App\Models\SentEmail;
 use App\Models\User;
 use App\Services\Mail\LogGmailSender;
 use App\Support\Mail\OutgoingEmail;
+use App\Support\Mail\SentEmailResult;
 use Database\Seeders\EmailTemplateSeeder;
 use Illuminate\Support\Facades\Log;
 use Spatie\Activitylog\Models\Activity;
@@ -42,4 +43,19 @@ test('sending without a connected gmail is refused', function () {
     $sender = User::factory()->create(['gmail_connected_at' => null]);
     expect(fn () => app(SendDocumentEmail::class)->handle($sender, Client::factory()->create(), 'invoice', ['a@b.test'], [], [], []))
         ->toThrow(GmailNotConnectedException::class, 'Conecta tu cuenta de Gmail para enviar correos desde el sistema.');
+});
+
+test('a rejected gmail token is reported as a reconnect request instead of a server error', function () {
+    expect((new GmailNotConnectedException)->getMessage())->toBe('Conecta tu cuenta de Gmail para enviar correos desde el sistema.');
+    actingAsRole('owner', ['gmail_connected_at' => now(), 'gmail_email' => 'yo@empresa.test']);
+    $this->app->instance(GmailSender::class, new class implements GmailSender
+    {
+        public function send(User $sender, OutgoingEmail $email): SentEmailResult
+        {
+            throw new GmailNotConnectedException('Google rechazó la conexión con Gmail (invalid_grant). Reconecta tu cuenta de Gmail.');
+        }
+    });
+    $client = Client::factory()->create(['email' => 'cliente@x.test']);
+    $this->post(route('sales.statements.send', $client), ['to' => ['cliente@x.test']])->assertRedirect()->assertSessionHas('error', 'Google rechazó la conexión con Gmail (invalid_grant). Reconecta tu cuenta de Gmail.');
+    expect(SentEmail::firstOrFail()->status)->toBe('failed');
 });

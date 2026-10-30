@@ -69,8 +69,8 @@ class InitialStockImporter extends BaseImporter
     {
         return [
             'sku' => ['required', 'string', 'max:50', 'exists:products,sku'],
-            'quantity' => ['required', 'numeric', 'gt:0'],
-            'unit_cost' => ['required', 'numeric', 'min:0'],
+            'quantity' => ['required', 'numeric', 'gt:0', 'max:9999999999.9999', 'regex:/^\d{1,10}(\.\d{1,4})?$/'],
+            'unit_cost' => ['required', 'numeric', 'min:0', 'max:9999999999.9999', 'regex:/^\d{1,10}(\.\d{1,4})?$/'],
             'lot_code' => ['nullable', Rule::requiredIf(fn (): bool => (bool) Product::query()->where('sku', $row['sku'] ?? '')->value('tracks_lots')), 'string', 'max:50'],
             'lot_expires_on' => ['nullable', 'date_format:Y-m-d'],
         ];

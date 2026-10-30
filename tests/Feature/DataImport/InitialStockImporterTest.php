@@ -25,3 +25,17 @@ test('initial stock import needs a warehouse and loads valid rows', function () 
     $this->post(route('admin.imports.confirm', $batch))->assertSessionHas('success', 'Importación completada: 2 creados, 0 actualizados');
     expect(StockBalance::whereNull('lot_id')->sum('quantity'))->toBe('15.0000');
 });
+
+test('initial stock quantities and costs are bounded to the column precision', function () {
+    $wh = Warehouse::factory()->create();
+    Product::factory()->create(['sku' => 'B-1']);
+    Product::factory()->create(['sku' => 'B-2']);
+    Product::factory()->create(['sku' => 'B-3']);
+    actingAsRole('warehouse');
+    $file = makeSpreadsheet([['SKU', 'Cantidad', 'Costo unitario', 'Lote', 'Vencimiento'], ['B-1', '99999999999', '1', '', ''], ['B-2', '1', '1.12345', '', ''], ['B-3', '1.5', '350.5', '', '']]);
+    $this->post(route('admin.imports.preview', 'initial_stock'), ['file' => $file, 'warehouse_id' => $wh->id])->assertRedirect();
+    $batch = ImportBatch::latest('id')->firstOrFail();
+    expect($batch->valid_rows)->toBe(1)->and($batch->invalid_rows)->toBe(2)
+        ->and($batch->rows()->where('row_number', 2)->first()->errors)->toHaveKey('quantity')
+        ->and($batch->rows()->where('row_number', 3)->first()->errors)->toHaveKey('unit_cost');
+});
