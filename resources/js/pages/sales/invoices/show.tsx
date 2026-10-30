@@ -29,6 +29,10 @@ import {
 import { create as createCreditNote } from '@/routes/sales/credit-notes';
 import { create as createDebitNote } from '@/routes/sales/debit-notes';
 import {
+    create as createDispatch,
+    show as showDispatch,
+} from '@/routes/inventory/dispatches';
+import {
     cancel,
     destroy,
     edit,
@@ -49,7 +53,15 @@ type Props = {
     invoice: Invoice;
     history: AuditEntry[];
     emails: SentEmailRow[];
+    dispatches: {
+        id: number;
+        number: string | null;
+        status: string;
+        status_label: string;
+        dispatch_date: string;
+    }[];
     can: {
+        dispatch: boolean;
         update: boolean;
         delete: boolean;
         issue: boolean;
@@ -70,6 +82,7 @@ export default function InvoiceShow({
     invoice,
     history,
     emails,
+    dispatches,
     can: abilities,
 }: Props) {
     const { url } = usePage();
@@ -174,6 +187,17 @@ export default function InvoiceShow({
                     Enviar por correo
                 </Button>
             )}
+            {abilities.dispatch && (
+                <Button variant="outline" asChild>
+                    <Link
+                        href={createDispatch.url({
+                            query: { invoice: invoice.id },
+                        })}
+                    >
+                        Conduce
+                    </Link>
+                </Button>
+            )}
             {abilities.creditNote && (
                 <Button variant="outline" asChild>
                     <Link
@@ -259,6 +283,7 @@ export default function InvoiceShow({
                 <Tabs defaultValue="lineas">
                     <TabsList>
                         <TabsTrigger value="lineas">Líneas</TabsTrigger>
+                        <TabsTrigger value="conduces">Conduces</TabsTrigger>
                         <TabsTrigger value="correos">Correos</TabsTrigger>
                         <TabsTrigger value="historial">Historial</TabsTrigger>
                     </TabsList>
@@ -304,6 +329,57 @@ export default function InvoiceShow({
                                             </td>
                                         </tr>
                                     ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </TabsContent>
+                    <TabsContent value="conduces" className="pt-4">
+                        <div className="rounded-md border">
+                            <table className="w-full text-sm">
+                                <thead>
+                                    <tr className="border-b text-left">
+                                        <th className="p-2">Número</th>
+                                        <th className="p-2">Fecha</th>
+                                        <th className="p-2">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {dispatches.map((dispatch) => (
+                                        <tr
+                                            key={dispatch.id}
+                                            className="border-b"
+                                        >
+                                            <td className="p-2">
+                                                <Link
+                                                    className="font-mono underline"
+                                                    href={showDispatch.url(
+                                                        dispatch.id,
+                                                    )}
+                                                >
+                                                    {dispatch.number ??
+                                                        'Borrador'}
+                                                </Link>
+                                            </td>
+                                            <td className="p-2">
+                                                {formatDate(
+                                                    dispatch.dispatch_date,
+                                                )}
+                                            </td>
+                                            <td className="p-2">
+                                                {dispatch.status_label}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {dispatches.length === 0 && (
+                                        <tr>
+                                            <td
+                                                colSpan={3}
+                                                className="p-4 text-center text-muted-foreground"
+                                            >
+                                                Sin conduces
+                                            </td>
+                                        </tr>
+                                    )}
                                 </tbody>
                             </table>
                         </div>

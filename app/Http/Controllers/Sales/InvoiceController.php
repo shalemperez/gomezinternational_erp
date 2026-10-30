@@ -18,6 +18,7 @@ use App\Http\Requests\Sales\IssueInvoiceRequest;
 use App\Http\Requests\Sales\SendDocumentEmailRequest;
 use App\Http\Requests\Sales\StoreInvoiceRequest;
 use App\Models\Currency;
+use App\Models\Dispatch;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\Proforma;
@@ -82,6 +83,7 @@ class InvoiceController extends Controller
             'invoice' => $this->invoiceProps($invoice, $user),
             'history' => AuditHistory::for($invoice),
             'emails' => $this->emailRows($invoice),
+            'dispatches' => $this->dispatchRows($invoice),
             'can' => [
                 'update' => $user->can('sales.invoices.update') && $invoice->isDraft() && $user->can('update', $invoice),
                 'delete' => $user->can('sales.invoices.delete') && $invoice->isDraft() && $user->can('delete', $invoice),
@@ -89,7 +91,7 @@ class InvoiceController extends Controller
                 'cancel' => $user->can('sales.invoices.cancel') && $invoice->isOpen() && $user->can('update', $invoice),
                 'send' => $user->can('sales.invoices.send') && $user->can('update', $invoice),
                 'creditOverride' => $user->can('sales.invoices.credit-override'),
-                'dispatch' => $user->can('inventory.dispatches.create') && $invoice->isOpen(),
+                'dispatch' => $user->can('inventory.dispatches.create') && $invoice->isOpen() && $invoice->dispatch_status !== 'complete',
                 'creditNote' => $user->can('sales.credit-notes.create') && ($invoice->isOpen() || $invoice->status === InvoiceStatus::Paid),
                 'debitNote' => $user->can('sales.debit-notes.create') && ($invoice->isOpen() || $invoice->status === InvoiceStatus::Paid),
                 'receipt' => $user->can('sales.receipts.create') && $invoice->isOpen(),
@@ -346,6 +348,19 @@ class InvoiceController extends Controller
                 'salesperson_id' => $invoice->client->salesperson_id,
             ],
         ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function dispatchRows(Invoice $invoice): array
+    {
+        return $invoice->dispatches()->orderByDesc('id')->get(['id', 'number', 'status', 'dispatch_date'])
+            ->map(fn (Dispatch $dispatch) => [
+                'id' => $dispatch->id,
+                'number' => $dispatch->number,
+                'status' => $dispatch->status->value,
+                'status_label' => $dispatch->status->label(),
+                'dispatch_date' => $dispatch->dispatch_date->toDateString(),
+            ])->values()->all();
     }
 
     /** @return array<int, array<string, mixed>> */

@@ -8,6 +8,7 @@ use App\Exceptions\DocumentStateException;
 use App\Exceptions\ImmutableDocumentException;
 use App\Models\AccountingEvent;
 use App\Models\Client;
+use App\Models\Dispatch;
 use App\Models\DocumentSequence;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
@@ -157,4 +158,15 @@ test('a credit override sent as true still requires a reason', function () {
     $draft = draftFor(['client_id' => $client->id, 'salesperson_id' => $this->sp->id], $owner);
 
     $this->post(route('sales.invoices.issue', $draft), ['credit_override' => 'true'])->assertSessionHasErrors(['credit_override_reason' => 'Indica el motivo de la autorización.']);
+});
+
+test('cancel is refused while a confirmed dispatch exists', function () {
+    actingAsRole('owner');
+    $i = issuedInvoice();
+    $line = $i->lines->first();
+    $this->post(route('inventory.dispatches.store'), validDispatchPayload($i, ['lines' => [['invoice_line_id' => $line->id, 'quantity' => '1', 'lot_id' => '']]]))->assertRedirect();
+    $this->post(route('inventory.dispatches.confirm', Dispatch::firstOrFail()))->assertRedirect()->assertSessionHas('success');
+
+    $this->post(route('sales.invoices.cancel', $i), ['reason' => 'Cliente desistió'])->assertSessionHas('error', 'Solo se pueden anular facturas sin cobros, notas ni despachos; usa una nota de crédito.');
+    expect($i->fresh()->status)->not->toBe(InvoiceStatus::Cancelled);
 });

@@ -179,4 +179,24 @@ class Invoice extends Model implements HasDocumentLines
     {
         return $this->hasMany(DebitNote::class);
     }
+
+    /** @return HasMany<Dispatch, $this> */
+    public function dispatches(): HasMany
+    {
+        return $this->hasMany(Dispatch::class);
+    }
+
+    /** Derives dispatch_status from the invoice lines: none, partial or complete (dispatched or credited covers the quantity). */
+    public function refreshDispatchStatus(): void
+    {
+        $lines = $this->lines()->get();
+        $dispatched = Decimal::sum($lines->map(fn (InvoiceLine $line) => $line->dispatched_quantity), 4);
+        $status = match (true) {
+            Decimal::isZero($dispatched) => 'none',
+            $lines->every(fn (InvoiceLine $line) => Decimal::cmp(Decimal::sum([$line->dispatched_quantity, $line->credited_quantity], 4), $line->quantity) >= 0) => 'complete',
+            default => 'partial',
+        };
+
+        $this->forceFill(['dispatch_status' => $status])->save();
+    }
 }

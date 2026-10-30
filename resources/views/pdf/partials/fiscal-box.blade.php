@@ -1,6 +1,6 @@
 <div class="box">
     <strong style="font-size: 13px;">{{ $title }}</strong><br>
-    @if($ncf)<strong>NCF: {{ $ncf }}</strong><br>@else<strong style="font-size: 14px;">BORRADOR</strong><br>@endif
+    @if($ncf)<strong>{{ $ncfLabel ?? 'NCF' }}: {{ $ncf }}</strong><br>@else<strong style="font-size: 14px;">BORRADOR</strong><br>@endif
     @if($expiresOn)Válida hasta: {{ $expiresOn }}<br>@endif
     @if($modifiedNcf)Modifica NCF: {{ $modifiedNcf }}<br>@endif
     @if($number)No. interno: {{ $number }}<br>@endif

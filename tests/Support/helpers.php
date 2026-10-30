@@ -210,3 +210,11 @@ function validDebitNotePayload(Invoice $invoice, array $over = []): array
         'lines' => [['product_id' => Product::factory()->create(['name' => 'Flete', 'itbis_rate' => '18.00'])->id, 'description' => 'Flete Santiago', 'quantity' => '1', 'unit_price' => '500', 'discount_percent' => '0']],
     ], $over);
 }
+
+function validDispatchPayload(Invoice $invoice, array $over = []): array
+{
+    return array_merge([
+        'invoice_id' => $invoice->id, 'dispatch_date' => now()->toDateString(), 'driver_name' => 'Pedro', 'vehicle' => 'A123456', 'notes' => '',
+        'lines' => $invoice->lines->map(fn ($l) => ['invoice_line_id' => $l->id, 'quantity' => $l->quantity, 'lot_id' => ''])->all(),
+    ], $over);
+}
