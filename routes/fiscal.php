@@ -21,4 +21,5 @@ Route::middleware(['auth'])->prefix('fiscal')->name('fiscal.')->group(function (
     Route::get('received-ecfs', [ReceivedEcfController::class, 'index'])->name('received-ecfs.index');
     Route::get('received-ecfs/{receivedEcf}', [ReceivedEcfController::class, 'show'])->name('received-ecfs.show');
     Route::get('received-ecfs/{receivedEcf}/xml', [ReceivedEcfController::class, 'xml'])->name('received-ecfs.xml');
+    Route::post('received-ecfs/{receivedEcf}/approve', [ReceivedEcfController::class, 'approve'])->name('received-ecf.approve');
 });

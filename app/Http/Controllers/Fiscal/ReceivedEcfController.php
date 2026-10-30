@@ -4,11 +4,14 @@ namespace App\Http\Controllers\Fiscal;
 
 use App\Exports\TableExport;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Fiscal\CommercialApprovalRequest;
 use App\Models\ReceivedEcf;
 use App\Models\User;
+use App\Services\Ecf\CommercialApprovalService;
 use App\Support\AuditHistory;
 use App\Support\TableQuery;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Middleware;
 use Illuminate\Support\Facades\Storage;
@@ -65,6 +68,15 @@ class ReceivedEcfController extends Controller
         abort_if($path === null || ! Storage::disk('local')->exists($path), 404);
 
         return Storage::disk('local')->download($path, basename($path));
+    }
+
+    #[Middleware('permission:fiscal.received-ecf.approve')]
+    public function approve(CommercialApprovalRequest $request, ReceivedEcf $receivedEcf, CommercialApprovalService $approvals): RedirectResponse
+    {
+        $approve = $request->string('decision')->toString() === 'approve';
+        $approvals->decide($receivedEcf, $this->actor($request), $approve, $request->string('reason')->toString());
+
+        return back()->with('success', $approve ? 'Aprobación comercial enviada a la DGII' : 'Rechazo comercial enviado a la DGII');
     }
 
     #[Middleware('permission:fiscal.received-ecf.export')]

@@ -148,6 +148,22 @@ class DgiiClient
     }
 
     /**
+     * Delivers an ACECF to the issuer's acceptance URL (no bearer token). Returns the HTTP status, or null when the
+     * issuer does not answer; never throws.
+     */
+    public function postToIssuer(string $baseUrl, string $xml, string $fileName): ?int
+    {
+        try {
+            return Http::timeout(10)
+                ->attach('xml', $xml, $fileName, ['Content-Type' => 'text/xml'])
+                ->post(rtrim($baseUrl, '/').'/fe/aprobacioncomercial/api/ecf')
+                ->status();
+        } catch (ConnectionException) {
+            return null;
+        }
+    }
+
+    /**
      * The receiver's directory entry for an RNC, or null when the taxpayer is not listed.
      *
      * @return array<string, mixed>|null
