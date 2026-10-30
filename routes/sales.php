@@ -11,6 +11,8 @@ Route::middleware(['auth'])->prefix('sales')->name('sales.')->group(function () 
     Route::get('invoices/export', [InvoiceController::class, 'export'])->name('invoices.export');
     Route::post('invoices/{invoice}/issue', [InvoiceController::class, 'issue'])->name('invoices.issue');
     Route::post('invoices/{invoice}/cancel', [InvoiceController::class, 'cancel'])->name('invoices.cancel');
+    Route::get('invoices/{invoice}/pdf', [InvoiceController::class, 'pdf'])->name('invoices.pdf');
+    Route::post('invoices/{invoice}/send', [InvoiceController::class, 'send'])->name('invoices.send');
     Route::post('proformas/{proforma}/invoice', [InvoiceController::class, 'fromProforma'])->name('proformas.invoice');
     Route::resource('invoices', InvoiceController::class);
 

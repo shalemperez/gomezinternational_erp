@@ -2,24 +2,31 @@
 
 namespace App\Http\Controllers\Sales;
 
+use App\Actions\Mail\SendDocumentEmail;
 use App\Actions\Sales\CancelInvoice;
 use App\Actions\Sales\CreateInvoiceFromProforma;
 use App\Actions\Sales\IssueInvoice;
 use App\Actions\Sales\SaveInvoice;
 use App\Enums\InvoiceStatus;
+use App\Enums\PaymentTerms;
+use App\Exceptions\DocumentStateException;
 use App\Exports\TableExport;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Sales\CancelInvoiceRequest;
 use App\Http\Requests\Sales\InvoiceFromProformaRequest;
 use App\Http\Requests\Sales\IssueInvoiceRequest;
+use App\Http\Requests\Sales\SendDocumentEmailRequest;
 use App\Http\Requests\Sales\StoreInvoiceRequest;
 use App\Models\Currency;
 use App\Models\Invoice;
+use App\Models\InvoiceLine;
 use App\Models\Proforma;
 use App\Models\Salesperson;
 use App\Models\SentEmail;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\Documents\DocumentPdf;
+use App\Services\Settings;
 use App\Support\AuditHistory;
 use App\Support\TableQuery;
 use Illuminate\Database\Eloquent\Builder;
@@ -32,6 +39,7 @@ use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 
 class InvoiceController extends Controller
 {
@@ -159,6 +167,48 @@ class InvoiceController extends Controller
         return redirect()->route('sales.invoices.show', $cancelled)->with('success', "Factura {$cancelled->number} anulada");
     }
 
+    #[Middleware('permission:sales.invoices.view')]
+    public function pdf(Invoice $invoice, DocumentPdf $pdf): SymfonyResponse
+    {
+        Gate::authorize('view', $invoice);
+        activity('invoices')->performedOn($invoice)->event('pdf_generated')->log('PDF de '.($invoice->number ?? 'borrador').' generado');
+
+        return $pdf->stream('pdf.sales.invoice', $this->pdfData($invoice), ($invoice->number ?? 'borrador-'.$invoice->id).'.pdf');
+    }
+
+    #[Middleware('permission:sales.invoices.send')]
+    public function send(SendDocumentEmailRequest $request, Invoice $invoice, SendDocumentEmail $sendEmail, DocumentPdf $pdf, Settings $settings): RedirectResponse
+    {
+        Gate::authorize('update', $invoice);
+        if (! $invoice->issued_at) {
+            throw new DocumentStateException('Solo se pueden enviar facturas emitidas');
+        }
+        $user = $this->actor($request);
+        $to = array_values($request->validated('to'));
+        $cc = array_values($request->validated('cc') ?? []);
+        $invoice->loadMissing(['salesperson:id,name', 'currency:id,code']);
+
+        $vars = [
+            'cliente' => $invoice->client_name ?? '',
+            'numero' => $invoice->number ?? '',
+            'empresa' => (string) $settings->get('company.name', ''),
+            'total' => DocumentPdf::money($invoice->total, $invoice->currency->code),
+            'fecha' => $invoice->issue_date->format('d/m/Y'),
+            'vendedor' => $invoice->salesperson->name,
+            'usuario' => $user->name,
+        ];
+        $attachments = [[
+            'name' => "{$invoice->number}.pdf",
+            'mime' => 'application/pdf',
+            'content' => $pdf->binary('pdf.sales.invoice', $this->pdfData($invoice), "{$invoice->number}.pdf"),
+        ]];
+
+        $sendEmail->handle($user, $invoice, 'invoice', $to, $cc, $vars, $attachments, $request->validated('body') ?: null, $request->validated('subject') ?: null);
+        $invoice->forceFill(['sent_at' => $invoice->sent_at ?? now()])->save();
+
+        return back()->with('success', 'Correo enviado a '.implode(', ', $to));
+    }
+
     #[Middleware('permission:sales.invoices.create')]
     public function fromProforma(InvoiceFromProformaRequest $request, Proforma $proforma, CreateInvoiceFromProforma $createFromProforma): RedirectResponse
     {
@@ -190,6 +240,28 @@ class InvoiceController extends Controller
             'Saldo' => 'balance',
             'Estado' => fn (Invoice $invoice) => $invoice->status->label(),
         ], $request->string('format', 'xlsx')->toString());
+    }
+
+    /** @return array<string, mixed> */
+    public function pdfData(Invoice $invoice): array
+    {
+        $invoice->load('lines.product', 'client', 'salesperson', 'currency');
+
+        return [
+            'invoice' => $invoice,
+            'lines' => $invoice->lines->map(fn (InvoiceLine $line) => $line->toArray())->values()->all(),
+            'totals' => [
+                'subtotal' => $invoice->subtotal,
+                'discount_total' => $invoice->discount_total,
+                'taxable_total' => $invoice->taxable_total,
+                'itbis_total' => $invoice->itbis_total,
+                'additional_tax_total' => $invoice->additional_tax_total,
+                'total' => $invoice->total,
+                'total_base' => $invoice->total_base,
+            ],
+            'currency' => $invoice->currency->code,
+            'copy' => 'Original',
+        ];
     }
 
     private function actor(Request $request): User
@@ -236,7 +308,9 @@ class InvoiceController extends Controller
             'salespeople' => Salesperson::query()->where('is_active', true)
                 ->when(! $canViewAll, fn (Builder $query) => $query->whereKey($user->salesperson instanceof Salesperson ? $user->salesperson->id : -1))
                 ->orderBy('name')->get(['id', 'name']),
-            'warehouses' => Warehouse::query()->where('is_active', true)->orderBy('name')->get(['id', 'name', 'is_default']),
+            'warehouses' => Warehouse::query()->where('is_active', true)->orderBy('name')->get(['id', 'name']),
+            'defaultWarehouseId' => Warehouse::default()?->id,
+            'paymentTerms' => array_map(fn (PaymentTerms $terms) => ['value' => $terms->value, 'label' => $terms->label()], PaymentTerms::cases()),
             'lockSalesperson' => ! $canViewAll,
             'defaultCurrencyId' => Currency::base()->id,
             'today' => now()->toDateString(),

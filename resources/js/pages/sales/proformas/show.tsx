@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ConfirmDelete } from '@/components/erp/confirm-delete';
 import { DocumentHeader } from '@/components/erp/document-header';
 import { DocumentLinesEditor } from '@/components/erp/document-lines-editor';
+import { InvoiceFromProformaDialog } from '@/components/erp/invoice-from-proforma-dialog';
 import { RecordHistory } from '@/components/erp/record-history';
 import { SendEmailDialog } from '@/components/erp/send-email-dialog';
 import { Button } from '@/components/ui/button';
@@ -67,6 +68,7 @@ export default function ProformaShow({
     const [transition, setTransition] = useState<Transition>(null);
     const [note, setNote] = useState('');
     const [emailOpen, setEmailOpen] = useState(false);
+    const [invoiceOpen, setInvoiceOpen] = useState(false);
     const currency = proforma.currency?.code === 'USD' ? 'USD' : 'DOP';
 
     const lines: DocumentLineInput[] = (proforma.lines ?? []).map((line) => ({
@@ -185,6 +187,9 @@ export default function ProformaShow({
                 <Button variant="outline" onClick={() => setEmailOpen(true)}>
                     Enviar por correo
                 </Button>
+            )}
+            {abilities.invoice && (
+                <Button onClick={() => setInvoiceOpen(true)}>Facturar</Button>
             )}
             {abilities.delete && (
                 <ConfirmDelete
@@ -336,6 +341,12 @@ export default function ProformaShow({
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            <InvoiceFromProformaDialog
+                proforma={proforma}
+                open={invoiceOpen}
+                onOpenChange={setInvoiceOpen}
+            />
 
             <SendEmailDialog
                 open={emailOpen}

@@ -1,0 +1,10 @@
+<div class="box">
+    <strong style="font-size: 13px;">{{ $title }}</strong><br>
+    @if($ncf)<strong>NCF: {{ $ncf }}</strong><br>@else<strong style="font-size: 14px;">BORRADOR</strong><br>@endif
+    @if($expiresOn)Válida hasta: {{ $expiresOn }}<br>@endif
+    @if($modifiedNcf)Modifica NCF: {{ $modifiedNcf }}<br>@endif
+    @if($number)No. interno: {{ $number }}<br>@endif
+    Fecha de emisión: {{ $issueDate }}<br>
+    @if($dueDate)Vencimiento: {{ $dueDate }}<br>@endif
+    @foreach($extra as $label => $value){{ $label }}: {{ $value }}<br>@endforeach
+</div>
