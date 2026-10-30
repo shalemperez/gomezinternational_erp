@@ -58,6 +58,7 @@ class IssueCreditNote
                     'lotId' => self::nullableInt($row['lot_id'] ?? null),
                 ];
             }
+            $this->assertCapsUnderLock($invoice, $reason, $resolved);
 
             $computed = $this->calculator->compute(array_map(fn (array $item) => $item['input'], $resolved));
             $totals = DocumentLines::totals($computed, $invoice->exchange_rate);
@@ -140,6 +141,34 @@ class IssueCreditNote
 
             return $note->fresh();
         });
+    }
+
+    /**
+     * Re-checks the per-line caps on the locked invoice, summing every row that targets the same invoice line.
+     *
+     * @param  list<array{input: LineInput, invoiceLine: ?InvoiceLine, lotId: ?int}>  $resolved
+     */
+    private function assertCapsUnderLock(Invoice $invoice, CreditNoteReason $reason, array $resolved): void
+    {
+        $totals = [];
+        foreach ($resolved as $item) {
+            if ($item['invoiceLine'] instanceof InvoiceLine) {
+                $id = $item['invoiceLine']->id;
+                $totals[$id] = Decimal::sum([$totals[$id] ?? '0', $item['input']->quantity], 4);
+            }
+        }
+        foreach ($totals as $lineId => $quantity) {
+            /** @var InvoiceLine $line */
+            $line = $invoice->lines->firstWhere('id', $lineId);
+            $cap = match ($reason) {
+                CreditNoteReason::Return => Decimal::qty(Decimal::of($line->dispatched_quantity)->minus(Decimal::of($line->returned_quantity))),
+                CreditNoteReason::Correction => $line->remainingToDispatch(),
+                CreditNoteReason::Discount => Decimal::qty($line->quantity),
+            };
+            if (Decimal::cmp($quantity, $cap) > 0) {
+                throw new DocumentStateException("La línea {$line->line_number} supera la cantidad disponible para esta nota ({$cap}).");
+            }
+        }
     }
 
     private static function nullableInt(mixed $value): ?int

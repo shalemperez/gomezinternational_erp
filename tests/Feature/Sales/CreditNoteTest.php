@@ -1,6 +1,8 @@
 <?php
 
+use App\Actions\Sales\IssueCreditNote;
 use App\Enums\InvoiceStatus;
+use App\Exceptions\DocumentStateException;
 use App\Exceptions\ImmutableDocumentException;
 use App\Models\AccountingEvent;
 use App\Models\CreditNote;
@@ -99,4 +101,51 @@ test('credit notes require an open invoice, respect scoping and render index, sh
     salesUserWithSalesperson();
     $this->get(route('sales.credit-notes.show', $n))->assertForbidden();
     $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i))->assertForbidden();
+});
+
+test('the same invoice line cannot appear twice in one credit note', function () {
+    $user = actingAsRole('accounting');
+    $i = issuedInvoice();
+    $line = $i->lines->first();
+    app(InventoryService::class)->dispatch(new StockLine($line->product_id, $i->warehouse_id, '2'), $i, $user);
+    app(InventoryService::class)->release($line->reservations()->whereNull('released_at')->firstOrFail());
+    $line->forceFill(['dispatched_quantity' => '2.0000', 'dispatched_cost' => '100.00'])->save();
+
+    $row = ['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => '2', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => ''];
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['reason' => 'return', 'lines' => [$row, $row]]))
+        ->assertSessionHasErrors(['lines.1.invoice_line_id' => 'La línea de factura está repetida.']);
+    expect($line->fresh()->returned_quantity)->toBe('0.0000');
+});
+
+test('the issue action re-checks return caps under the lock', function () {
+    $user = actingAsRole('accounting');
+    $i = issuedInvoice();
+    $line = $i->lines->first();
+    app(InventoryService::class)->dispatch(new StockLine($line->product_id, $i->warehouse_id, '2'), $i, $user);
+    app(InventoryService::class)->release($line->reservations()->whereNull('released_at')->firstOrFail());
+    $line->forceFill(['dispatched_quantity' => '2.0000', 'dispatched_cost' => '100.00', 'returned_quantity' => '2.0000'])->save();
+
+    $payload = validCreditNotePayload($i, ['reason' => 'return', 'lines' => [['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => '']]]);
+    expect(fn () => app(IssueCreditNote::class)->handle($payload, $i, $user))
+        ->toThrow(DocumentStateException::class, 'supera la cantidad disponible');
+    expect(CreditNote::count())->toBe(0);
+});
+
+test('credit note costs are hidden from users without the cost permission', function () {
+    $user = actingAsRole('accounting');
+    $i = issuedInvoice();
+    $line = $i->lines->first();
+    app(InventoryService::class)->dispatch(new StockLine($line->product_id, $i->warehouse_id, '2'), $i, $user);
+    app(InventoryService::class)->release($line->reservations()->whereNull('released_at')->firstOrFail());
+    $line->forceFill(['dispatched_quantity' => '2.0000', 'dispatched_cost' => '100.00'])->save();
+    $this->post(route('sales.credit-notes.store'), validCreditNotePayload($i, ['reason' => 'return', 'lines' => [['invoice_line_id' => $line->id, 'product_id' => $line->product_id, 'description' => '', 'quantity' => '1', 'unit_price' => '100', 'discount_percent' => '0', 'lot_id' => '']]]))
+        ->assertRedirect();
+    $n = CreditNote::firstOrFail();
+
+    // sales can view credit notes (sales.credit-notes.view) but lacks inventory.stock.view-costs
+    actingAsRole('sales')->givePermissionTo('sales.invoices.view-all');
+    $this->get(route('sales.credit-notes.show', $n))->assertOk()->assertInertia(fn ($p) => $p->missing('creditNote.returned_cost'));
+
+    actingAsRole('owner');
+    $this->get(route('sales.credit-notes.show', $n))->assertOk()->assertInertia(fn ($p) => $p->has('creditNote.returned_cost'));
 });

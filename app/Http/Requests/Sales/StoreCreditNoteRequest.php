@@ -33,7 +33,7 @@ class StoreCreditNoteRequest extends FormRequest
             'warehouse_id' => ['nullable', 'integer', Rule::exists('warehouses', 'id')->where('is_active', true)],
             'notes' => ['nullable', 'string', 'max:2000'],
             ...$this->lineRules(),
-            'lines.*.invoice_line_id' => ['nullable', 'integer', 'exists:invoice_lines,id'],
+            'lines.*.invoice_line_id' => ['nullable', 'integer', 'distinct', 'exists:invoice_lines,id'],
             'lines.*.lot_id' => ['nullable', 'integer', 'exists:lots,id'],
         ];
     }
@@ -43,6 +43,7 @@ class StoreCreditNoteRequest extends FormRequest
     {
         return [
             'warehouse_id.exists' => 'El almacén no existe o está inactivo.',
+            'lines.*.invoice_line_id.distinct' => 'La línea de factura está repetida.',
             ...$this->lineMessages(),
         ];
     }

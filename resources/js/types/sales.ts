@@ -203,7 +203,7 @@ export type CreditNote = DocumentTotals & {
     issue_date: string;
     reason: string;
     reason_label: string;
-    returned_cost: string;
+    returned_cost?: string;
     notes: string | null;
     issued_at: string | null;
     invoice?: { id: number; number: string; ncf: string | null } | null;

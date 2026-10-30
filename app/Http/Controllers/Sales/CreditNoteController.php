@@ -19,6 +19,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Attributes\Controllers\Middleware;
+use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -30,8 +31,9 @@ class CreditNoteController extends Controller
     #[Middleware('permission:sales.credit-notes.view')]
     public function index(Request $request): Response
     {
+        $canViewCosts = $request->user()?->can('inventory.stock.view-costs') ?? false;
         $rows = TableQuery::apply($this->filteredQuery($request), $request, ['credit_notes.number', 'credit_notes.ncf', 'credit_notes.modified_ncf'], ['number', 'ncf', 'issue_date', 'total'], 'issue_date', 'desc')
-            ->through(fn (CreditNote $creditNote) => [...$creditNote->toArray(), 'reason_label' => $creditNote->reason->label()]);
+            ->through(fn (CreditNote $creditNote) => [...Arr::except($creditNote->toArray(), $canViewCosts ? [] : ['returned_cost']), 'reason_label' => $creditNote->reason->label()]);
 
         return Inertia::render('sales/credit-notes/index', [
             'rows' => $rows,
@@ -73,13 +75,14 @@ class CreditNoteController extends Controller
     }
 
     #[Middleware('permission:sales.credit-notes.view')]
-    public function show(CreditNote $creditNote): Response
+    public function show(Request $request, CreditNote $creditNote): Response
     {
         Gate::authorize('view', $creditNote);
         $creditNote->loadMissing(['invoice:id,number,ncf', 'client:id,business_name,tax_id', 'salesperson:id,name', 'currency:id,code', 'lines.product:id,sku,name', 'lines.lot:id,code,expires_on']);
+        $canViewCosts = $request->user()?->can('inventory.stock.view-costs') ?? false;
 
         return Inertia::render('sales/credit-notes/show', [
-            'creditNote' => [...$creditNote->toArray(), 'reason_label' => $creditNote->reason->label(), 'ncf_type_label' => $creditNote->ncf_type->label()],
+            'creditNote' => [...Arr::except($creditNote->toArray(), $canViewCosts ? [] : ['returned_cost']), 'reason_label' => $creditNote->reason->label(), 'ncf_type_label' => $creditNote->ncf_type->label()],
             'history' => AuditHistory::for($creditNote),
         ]);
     }
