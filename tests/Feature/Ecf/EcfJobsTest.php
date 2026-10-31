@@ -151,3 +151,24 @@ test('the daily alert warns when the active certificate expires within thirty da
     expect($mail->introLines)->toContain('El certificado digital Cert vence el 10/11/2026 (en 10 días); carga uno nuevo en Configuración → Facturación electrónica.')
         ->and($expiredMail->introLines)->toContain('El certificado digital Cert venció el 01/10/2026; la emisión electrónica está detenida hasta que cargues uno vigente.');
 });
+
+test('the retry sweep also picks up documents left without a next attempt and alanube documents never submitted', function () {
+    ecfSettings();
+    $stuck = EcfDocument::factory()->create(['status' => 'signed', 'attempts' => 2, 'next_attempt_at' => null, 'last_attempt_at' => now()->subMinutes(15)]);
+    $running = EcfDocument::factory()->create(['status' => 'signed', 'attempts' => 1, 'next_attempt_at' => null, 'last_attempt_at' => now()->subMinutes(5)]);
+    $exhausted = EcfDocument::factory()->create(['status' => 'signed', 'attempts' => 48, 'next_attempt_at' => null, 'last_attempt_at' => now()->subHour()]);
+    $alanube = EcfDocument::factory()->create(['provider' => 'alanube', 'status' => 'pending', 'attempts' => 0, 'created_at' => now()->subMinutes(5)]);
+    Bus::fake([SubmitEcfDocument::class, PollEcfStatus::class]);
+    (new RetryPendingEcfDocuments)->handle();
+    Bus::assertDispatched(SubmitEcfDocument::class, fn ($j) => $j->document->is($stuck));
+    Bus::assertDispatched(SubmitEcfDocument::class, fn ($j) => $j->document->is($alanube));
+    Bus::assertNotDispatched(SubmitEcfDocument::class, fn ($j) => $j->document->is($running));
+    Bus::assertNotDispatched(SubmitEcfDocument::class, fn ($j) => $j->document->is($exhausted));
+    Bus::assertDispatchedTimes(SubmitEcfDocument::class, 2);
+});
+
+test('submit and poll jobs may run for 150 seconds and the database queue retries only after 180', function () {
+    $doc = ecfDocFor('in_process');
+    expect((new SubmitEcfDocument($doc))->timeout)->toBe(150)->and((new PollEcfStatus($doc))->timeout)->toBe(150)
+        ->and(config('queue.connections.database.retry_after'))->toBe(180);
+});

@@ -19,6 +19,9 @@ class PollEcfStatus implements ShouldBeUnique, ShouldQueue
 
     public int $uniqueFor = 600;
 
+    /** A DGII call chain (seed, validate, post, 401 refresh) can take up to 4 × 30 s. */
+    public int $timeout = 150;
+
     public function __construct(public EcfDocument $document) {}
 
     public function uniqueId(): string

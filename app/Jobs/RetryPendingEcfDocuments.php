@@ -18,10 +18,14 @@ class RetryPendingEcfDocuments implements ShouldQueue
     {
         $dueSubmissions = EcfDocument::query()->readyToSubmit()
             ->whereNotNull('next_attempt_at')->where('next_attempt_at', '<=', now())->get();
-        $firstSubmissions = EcfDocument::query()->where('status', EcfStatus::Signed->value)->where('attempts', 0)
-            ->where('created_at', '<=', now()->subMinutes(2))->get();
+        $firstSubmissions = EcfDocument::query()->whereIn('status', [EcfStatus::Pending->value, EcfStatus::Signed->value])
+            ->where('attempts', 0)->where('created_at', '<=', now()->subMinutes(2))->get();
+        $stuckSubmissions = EcfDocument::query()->whereIn('status', [EcfStatus::Pending->value, EcfStatus::Signed->value])
+            ->whereNull('next_attempt_at')->where('attempts', '>', 0)->where('attempts', '<', (int) config('ecf.max_attempts'))
+            ->where('last_attempt_at', '<=', now()->subMinutes(10))->get();
+        $submissions = $dueSubmissions->merge($firstSubmissions)->merge($stuckSubmissions);
 
-        foreach ($dueSubmissions->merge($firstSubmissions) as $document) {
+        foreach ($submissions as $document) {
             SubmitEcfDocument::dispatch($document);
         }
 
@@ -32,7 +36,7 @@ class RetryPendingEcfDocuments implements ShouldQueue
             PollEcfStatus::dispatch($document);
         }
 
-        $submitted = $dueSubmissions->count() + $firstSubmissions->count();
+        $submitted = $submissions->count();
         $polled = $dueStatusChecks->count();
         if ($submitted > 0 || $polled > 0) {
             activity('ecf_documents')->event('retry_sweep')->withProperties(['submitted' => $submitted, 'polled' => $polled])
