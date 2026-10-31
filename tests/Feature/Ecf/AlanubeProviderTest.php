@@ -105,3 +105,11 @@ test('a resend of an alanube document with a stored id reads it back instead of 
     expect($doc->fresh()->status)->toBe(EcfStatus::Accepted);
     Http::assertNotSent(fn (Request $r) => $r->method() === 'POST');
 });
+
+test('an alanube request left by a rolled back issue is moved aside', function () {
+    $directory = 'ecf/test/'.now()->year.'/E310000000001';
+    Storage::disk('local')->put("{$directory}/alanube-request.json", '{"stale":true}');
+    $doc = issuedInvoice()->ecfDocument;
+    expect($doc->encf)->toBe('E310000000001')->and(Storage::disk('local')->get("{$directory}/alanube-request.json"))->toContain('E310000000001')
+        ->and(Storage::disk('local')->files("{$directory}/orphaned"))->toHaveCount(1);
+});

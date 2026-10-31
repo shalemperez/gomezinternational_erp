@@ -33,16 +33,19 @@ class LocalXmlPreparer
         $signed = $this->sign($this->writer->write($data, $fechaHoraFirma), $certificate);
         $this->validator->validate($this->load($signed->xml), $this->validator->schemaFor($data->type));
 
-        $directory = $this->storage->documentDir($document);
-        $document->xml_path = $this->storage->putNew("{$directory}/{$data->fileName()}", $signed->xml);
+        $rfce = null;
+        if ($document->flow === 'rfce') {
+            $rfce = $this->sign($this->writer->writeRfce($data, $signed->securityCode), $certificate);
+            $this->validator->validate($this->load($rfce->xml), 'rfce');
+        }
+
+        $document->xml_path = $this->storage->putForDocument($document, $data->fileName(), $signed->xml);
         $document->security_code = $signed->securityCode;
         $document->signed_at = $fechaHoraFirma;
 
         $environment = $document->environment;
-        if ($document->flow === 'rfce') {
-            $rfce = $this->sign($this->writer->writeRfce($data, $signed->securityCode), $certificate);
-            $this->validator->validate($this->load($rfce->xml), 'rfce');
-            $document->rfce_xml_path = $this->storage->putNew("{$directory}/RFCE-{$data->fileName()}", $rfce->xml);
+        if ($rfce !== null) {
+            $document->rfce_xml_path = $this->storage->putForDocument($document, "RFCE-{$data->fileName()}", $rfce->xml);
             $document->qr_url = EcfQrUrl::forRfce($environment, $data->emisor->rnc, $data->encf, $data->totals->montoTotal, $signed->securityCode);
         } else {
             $document->qr_url = EcfQrUrl::forEcf(

@@ -42,7 +42,7 @@ class AlanubeProvider implements EcfProvider
     {
         $json = json_encode($this->mapper->toPayload($data), JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        $this->storage->putNew($this->storage->documentDir($document).'/'.self::REQUEST_FILE, $json);
+        $this->storage->putForDocument($document, self::REQUEST_FILE, $json);
     }
 
     /**

@@ -129,3 +129,14 @@ test('a late result never overwrites a final or cancelled status', function () {
     $service->applyResult($cancelled, new EcfSubmissionResult(status: EcfStatus::Accepted, trackId: 'LATE-2', code: 1, messages: [], raw: [], sequenceUsed: true, httpStatus: 200), 'send');
     expect($cancelled->fresh()->status)->toBe(EcfStatus::Cancelled)->and($cancelled->fresh()->accepted_at)->toBeNull();
 });
+
+test('a file left by a rolled back issue is moved aside instead of blocking the e-ncf', function () {
+    ecfSettings();
+    activeCertificate();
+    $directory = 'ecf/test/'.now()->year.'/E310000000020';
+    Storage::disk('local')->put("{$directory}/131880738E310000000020.xml", 'stale');
+    $doc = app(EcfService::class)->create(issuedInvoice(), new FiscalNumber('E310000000020', NcfType::E31, CarbonImmutable::parse('2027-12-31'), NcfSequence::query()->where('ncf_type', 'E31')->value('id')), null);
+    $orphans = Storage::disk('local')->files("{$directory}/orphaned");
+    expect($doc->xml_path)->toBe("{$directory}/131880738E310000000020.xml")->and(Storage::disk('local')->get($doc->xml_path))->toContain('<eNCF>E310000000020</eNCF>')
+        ->and($orphans)->toHaveCount(1)->and(Storage::disk('local')->get($orphans[0]))->toBe('stale');
+});

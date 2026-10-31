@@ -4,7 +4,9 @@ namespace App\Services\Ecf;
 
 use App\Exceptions\EcfException;
 use App\Models\EcfDocument;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 /** Write-once file storage for every e-CF, RFCE and DGII response (GC-18). */
 class EcfStorage
@@ -24,6 +26,23 @@ class EcfStorage
         Storage::disk(config('ecf.storage_disk'))->put($path, $contents);
 
         return $path;
+    }
+
+    /**
+     * Only for files written while the document row is being created. `ecf_documents` is unique on (encf, environment), so an existing file can only be a leftover of an issue whose transaction rolled back and released the e-NCF.
+     */
+    public function putForDocument(EcfDocument $document, string $fileName, string $contents): string
+    {
+        $directory = $this->documentDir($document);
+        $path = "{$directory}/{$fileName}";
+
+        if ($this->exists($path)) {
+            $orphanedPath = "{$directory}/orphaned/".Str::uuid()->toString().'-'.$fileName;
+            Storage::disk(config('ecf.storage_disk'))->move($path, $orphanedPath);
+            Log::warning('Archivo e-CF huérfano movido', ['path' => $orphanedPath]);
+        }
+
+        return $this->putNew($path, $contents);
     }
 
     public function get(string $path): string
