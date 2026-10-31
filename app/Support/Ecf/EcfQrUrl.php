@@ -3,6 +3,7 @@
 namespace App\Support\Ecf;
 
 use App\Enums\EcfEnvironment;
+use Carbon\CarbonImmutable;
 use Carbon\CarbonInterface;
 
 final class EcfQrUrl
@@ -18,7 +19,7 @@ final class EcfQrUrl
             'encf' => $encf,
             'fechaemision' => $fechaEmision->format('d-m-Y'),
             'montototal' => $montoTotal,
-            'fechafirma' => $fechaFirma->format('d-m-Y H:i:s'),
+            'fechafirma' => CarbonImmutable::instance($fechaFirma)->setTimezone(config('ecf.timezone'))->format('d-m-Y H:i:s'),
             'codigoseguridad' => $codigoSeguridad,
         ];
 

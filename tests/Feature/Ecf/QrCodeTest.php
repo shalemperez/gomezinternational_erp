@@ -21,3 +21,8 @@ test('the qr png encodes the url and decodes back', function () {
     $png = base64_decode(substr($dataUri, strlen('data:image/png;base64,')));
     expect(substr($png, 1, 3))->toBe('PNG')->and(app(QrCodeGenerator::class)->decode($png))->toBe($url);
 });
+
+test('the qr signing time is printed in santo domingo time whatever timezone the instant carries', function () {
+    $url = EcfQrUrl::forEcf(EcfEnvironment::Test, '131880738', null, 'E310000000001', CarbonImmutable::parse('2026-11-01'), '100.00', CarbonImmutable::parse('2026-11-01 02:30:00', 'UTC'), 'abcdef');
+    expect($url)->toContain('fechafirma=31-10-2026%2022%3A30%3A00');
+});

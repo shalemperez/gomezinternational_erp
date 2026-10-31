@@ -188,3 +188,19 @@ test('a credit note on an e-cf older than 30 days carries IndicadorNotaCredito 1
 
     expect((new DOMXPath($doc))->evaluate('string(//IdDoc/IndicadorNotaCredito)'))->toBe('1');
 });
+
+test('an itbis rate other than 18, 16 or 0 is refused with the line number', function () {
+    companyFiscalSettings();
+    $invoice = issuedInvoice();
+    DB::table('invoice_lines')->where('invoice_id', $invoice->id)->update(['itbis_rate' => '10.00']);
+    expect(fn () => app(EcfDocumentBuilder::class)->fromInvoice($invoice->fresh(), NcfType::E31, 'E310000000001', CarbonImmutable::parse('2027-12-31')))
+        ->toThrow(EcfException::class, 'La línea 1 tiene una tasa de ITBIS de 10.00 % que el e-CF no admite (solo 18 %, 16 % o exento).');
+});
+
+test('an e-cf whose total differs from the document total is refused', function () {
+    companyFiscalSettings();
+    $invoice = issuedInvoice(); // 2 × 100.00 at 18 % = 236.00
+    DB::table('invoices')->where('id', $invoice->id)->update(['total' => '999.99']);
+    expect(fn () => app(EcfDocumentBuilder::class)->fromInvoice($invoice->fresh(), NcfType::E31, 'E310000000001', CarbonImmutable::parse('2027-12-31')))
+        ->toThrow(EcfException::class, 'El total del e-CF (236.00) no coincide con el total del documento (999.99).');
+});

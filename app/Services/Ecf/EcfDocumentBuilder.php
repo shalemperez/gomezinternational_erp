@@ -25,7 +25,8 @@ use Illuminate\Support\Collection;
 
 /**
  * Maps a sales document to the provider-independent e-CF data. Runs before any sequence is consumed:
- * every refusal (missing company data, quantity with more than two decimals, unmapped tax) throws EcfException.
+ * every refusal (missing company data, quantity with more than two decimals, unmapped tax, unknown ITBIS rate,
+ * totals that differ from the document) throws EcfException.
  */
 class EcfDocumentBuilder
 {
@@ -56,6 +57,7 @@ class EcfDocumentBuilder
             buyer: $this->buyer($type, $invoice->client_tax_id, $invoice->client_name, $invoice->client_address),
             reference: null,
             indicadorNotaCredito: null,
+            documentTotal: (string) $invoice->total,
         );
     }
 
@@ -87,6 +89,7 @@ class EcfDocumentBuilder
                 razonModificacion: mb_substr($note->reason->label(), 0, 90),
             ),
             indicadorNotaCredito: $type === NcfType::E34 ? $this->indicadorNotaCredito($originalDate, $issueDate) : null,
+            documentTotal: (string) $note->total,
         );
     }
 
@@ -116,6 +119,7 @@ class EcfDocumentBuilder
                 razonModificacion: mb_substr($note->reason->label(), 0, 90),
             ),
             indicadorNotaCredito: null,
+            documentTotal: (string) $note->total,
         );
     }
 
@@ -161,6 +165,7 @@ class EcfDocumentBuilder
         EcfParty $buyer,
         ?EcfReference $reference,
         ?int $indicadorNotaCredito,
+        string $documentTotal,
     ): EcfDocumentData {
         $issuer = $this->issuer();
 
@@ -182,6 +187,12 @@ class EcfDocumentBuilder
                 totals: $this->totals($this->rows($lines, '1', $additionalTaxes)),
             )
             : null;
+        $totals = $this->totals($rows);
+
+        $documentCurrencyTotal = $foreign !== null ? $foreign->totals->montoTotal : $totals->montoTotal;
+        if (Decimal::cmp($documentCurrencyTotal, Decimal::money($documentTotal)) !== 0) {
+            throw new EcfException("El total del e-CF ({$documentCurrencyTotal}) no coincide con el total del documento (".Decimal::money($documentTotal).').');
+        }
 
         return new EcfDocumentData(
             type: $type,
@@ -194,7 +205,7 @@ class EcfDocumentBuilder
             emisor: $issuer,
             comprador: $buyer,
             items: array_map(fn (array $row): EcfItem => $row['item'], $rows),
-            totals: $this->totals($rows),
+            totals: $totals,
             otraMoneda: $foreign,
             referencia: $reference,
             indicadorNotaCredito: $indicadorNotaCredito,
@@ -297,7 +308,7 @@ class EcfDocumentBuilder
             return [
                 'item' => new EcfItem(
                     numeroLinea: (int) $line->line_number,
-                    indicadorFacturacion: $this->indicadorFacturacion((string) $line->itbis_rate),
+                    indicadorFacturacion: $this->indicadorFacturacion((string) $line->itbis_rate, (int) $line->line_number),
                     nombre: mb_substr($description, 0, 80),
                     descripcion: mb_strlen($description) > 80 ? mb_substr($description, 0, 1000) : null,
                     cantidad: $cantidad,
@@ -405,12 +416,13 @@ class EcfDocumentBuilder
         return $values === [] ? null : Decimal::sum($values);
     }
 
-    private function indicadorFacturacion(string $itbisRate): int
+    private function indicadorFacturacion(string $itbisRate, int $lineNumber): int
     {
         return match (true) {
             Decimal::cmp($itbisRate, '18.00') === 0 => 1,
             Decimal::cmp($itbisRate, '16.00') === 0 => 2,
-            default => 4,
+            Decimal::isZero($itbisRate) => 4,
+            default => throw new EcfException("La línea {$lineNumber} tiene una tasa de ITBIS de {$itbisRate} % que el e-CF no admite (solo 18 %, 16 % o exento)."),
         };
     }
 
