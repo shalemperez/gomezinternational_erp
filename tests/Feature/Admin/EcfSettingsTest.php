@@ -92,8 +92,10 @@ test('secret settings never reach the activity log', function () {
     app(Settings::class)->set('ecf.alanube.webhook_key', 'hook-secret-456');
     app(Settings::class)->set('ecf.alanube.api_key', Crypt::encryptString('api-secret-789'));
     app(Settings::class)->set('ecf.provider', 'alanube');
-    $logged = Activity::inLog('settings')->get()->map(fn ($activity) => json_encode($activity->properties))->implode(' ');
-    expect($logged)->not->toContain('hook-secret')->not->toContain('eyJ')->and(Activity::inLog('settings')->where('subject_id', Setting::query()->where('key', 'ecf.provider')->value('id'))->exists())->toBeTrue();
+    $logged = Activity::inLog('settings')->get()->map(fn ($activity) => json_encode($activity->attribute_changes).json_encode($activity->properties))->implode(' ');
+    $providerRow = Activity::inLog('settings')->where('subject_id', Setting::query()->where('key', 'ecf.provider')->value('id'))->latest('id')->firstOrFail();
+    expect($logged)->not->toContain('hook-secret')->not->toContain('eyJ')
+        ->and(json_encode($providerRow->attribute_changes))->toContain('alanube');
 });
 
 test('the certificate rnc warning ignores dashes in the company rnc', function () {

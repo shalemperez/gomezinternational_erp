@@ -149,7 +149,8 @@ class EcfSettingsController extends Controller
         }
 
         $warnings = [];
-        if ($certificate->rnc !== null && $companyRnc !== '' && $certificate->rnc !== FiscalId::normalize($companyRnc)) {
+        $normalizedCompanyRnc = FiscalId::normalize($companyRnc);
+        if ($certificate->rnc !== null && $normalizedCompanyRnc !== '' && $certificate->rnc !== $normalizedCompanyRnc) {
             $warnings[] = "El certificado pertenece al RNC {$certificate->rnc}, distinto al RNC de la empresa {$companyRnc}.";
         }
         if ($certificate->isExpired()) {
