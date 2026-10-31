@@ -86,3 +86,21 @@ test('deactivating the certificate is audited and blocks ecf mode with dgii', fu
     expect($cert->fresh()->is_active)->toBeFalse()->and(Activity::inLog('ecf_certificates')->where('event', 'deactivated')->where('subject_id', $cert->id)->exists())->toBeTrue();
     $this->put(route('admin.ecf-settings.update'), ecfSettingsPayload(['fiscal' => ['mode' => 'ecf'], 'ecf' => ['provider' => 'dgii']]))->assertSessionHasErrors('fiscal.mode');
 });
+
+test('secret settings never reach the activity log', function () {
+    app(Settings::class)->set('ecf.alanube.webhook_key', 'hook-secret-123');
+    app(Settings::class)->set('ecf.alanube.webhook_key', 'hook-secret-456');
+    app(Settings::class)->set('ecf.alanube.api_key', Crypt::encryptString('api-secret-789'));
+    app(Settings::class)->set('ecf.provider', 'alanube');
+    $logged = Activity::inLog('settings')->get()->map(fn ($activity) => json_encode($activity->properties))->implode(' ');
+    expect($logged)->not->toContain('hook-secret')->not->toContain('eyJ')->and(Activity::inLog('settings')->where('subject_id', Setting::query()->where('key', 'ecf.provider')->value('id'))->exists())->toBeTrue();
+});
+
+test('the certificate rnc warning ignores dashes in the company rnc', function () {
+    actingAsRole('owner');
+    activeCertificate(); // subject serialNumber 131880738
+    app(Settings::class)->set('company.rnc', '1-31-88073-8');
+    $this->get(route('admin.ecf-settings.index'))->assertOk()->assertInertia(fn ($p) => $p->where('warnings', []));
+    app(Settings::class)->set('company.rnc', '1-01-01010-1');
+    $this->get(route('admin.ecf-settings.index'))->assertInertia(fn ($p) => $p->where('warnings.0', 'El certificado pertenece al RNC 131880738, distinto al RNC de la empresa 1-01-01010-1.'));
+});

@@ -13,6 +13,7 @@ use App\Models\User;
 use App\Services\Ecf\CertificateStore;
 use App\Services\Fiscal\FiscalNumberingService;
 use App\Services\Settings;
+use App\Support\FiscalId;
 use App\Support\Money\Decimal;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -148,7 +149,7 @@ class EcfSettingsController extends Controller
         }
 
         $warnings = [];
-        if ($certificate->rnc !== null && $companyRnc !== '' && $certificate->rnc !== $companyRnc) {
+        if ($certificate->rnc !== null && $companyRnc !== '' && $certificate->rnc !== FiscalId::normalize($companyRnc)) {
             $warnings[] = "El certificado pertenece al RNC {$certificate->rnc}, distinto al RNC de la empresa {$companyRnc}.";
         }
         if ($certificate->isExpired()) {
