@@ -75,6 +75,7 @@ class ReceivedEcf extends Model
         return match ($this->commercial_status) {
             'approved' => 'Aprobado',
             'rejected' => 'Rechazado',
+            'sending' => 'Enviando',
             default => 'Pendiente',
         };
     }

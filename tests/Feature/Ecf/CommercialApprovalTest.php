@@ -65,3 +65,19 @@ test('the approve route enforces the permission and validates the decision', fun
     $this->post(route('fiscal.received-ecf.approve', $received), ['decision' => 'approve'])->assertRedirect()->assertSessionHas('success', 'Aprobación comercial enviada a la DGII');
     expect($received->fresh()->notes)->toContain('Entrega al emisor: sin URL');
 });
+
+test('a decision being sent blocks a second decision and a dgii failure releases it', function () {
+    $received = ReceivedEcf::query()->firstOrFail();
+    $actor = User::factory()->create();
+    $received->forceFill(['commercial_status' => 'sending'])->save();
+    expect(fn () => app(CommercialApprovalService::class)->decide($received, $actor, true, null))->toThrow(EcfException::class, 'Ya se está enviando una decisión comercial para este e-CF.');
+    $received->forceFill(['commercial_status' => 'pending'])->save();
+    $statusDuringCall = null;
+    Http::fake([...fakeDgiiAuth(), 'https://ecf.dgii.gov.do/testecf/aprobacioncomercial/api/aprobacioncomercial' => function () use ($received, &$statusDuringCall) {
+        $statusDuringCall = $received->fresh()->commercial_status;
+
+        return Http::response(['mensaje' => 'Error'], 400);
+    }]);
+    expect(fn () => app(CommercialApprovalService::class)->decide($received->fresh(), $actor, true, null))->toThrow(EcfException::class, 'La DGII rechazó la aprobación comercial: Error');
+    expect($statusDuringCall)->toBe('sending')->and($received->fresh()->commercial_status)->toBe('pending')->and($received->fresh()->commercialStatusLabel())->toBe('Pendiente');
+});
