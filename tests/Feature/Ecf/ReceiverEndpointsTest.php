@@ -9,6 +9,7 @@ use App\Services\Ecf\EcfXmlWriter;
 use App\Services\Ecf\XmlSigner;
 use App\Services\Ecf\XsdValidator;
 use App\Services\Settings;
+use App\Support\FiscalId;
 use Carbon\CarbonImmutable;
 use Database\Seeders\DocumentSequenceSeeder;
 use Illuminate\Http\UploadedFile;
@@ -23,11 +24,12 @@ beforeEach(function () {
     activeCertificate();
 });
 
-/** Writes an ACECF about one of our e-CF and signs it with a fake supplier certificate (signature only, not trust). */
-function signedAcecfFor(EcfDocument $document, int $estado, ?string $motivo): string
+/** Writes an ACECF about one of our e-CF, naming $buyerRnc (default: the document's client) and signed by a fake certificate of $signerRnc (default: the buyer). */
+function signedAcecfFor(EcfDocument $document, int $estado, ?string $motivo, ?string $buyerRnc = null, ?string $signerRnc = null): string
 {
-    openssl_pkcs12_read(fakeP12('x', '101010101'), $bundle, 'x');
-    $acecf = app(EcfXmlWriter::class)->writeAcecf('131880738', $document->encf, CarbonImmutable::now(), '1180.00', '101010101', $estado, $motivo, CarbonImmutable::now());
+    $buyerRnc ??= FiscalId::normalize((string) $document->document->client_tax_id);
+    openssl_pkcs12_read(fakeP12('x', $signerRnc ?? $buyerRnc), $bundle, 'x');
+    $acecf = app(EcfXmlWriter::class)->writeAcecf('131880738', $document->encf, CarbonImmutable::now(), '1180.00', $buyerRnc, $estado, $motivo, CarbonImmutable::now());
 
     return app(XmlSigner::class)->signWithPem($acecf, $bundle['cert'], $bundle['pkey'])->xml;
 }
@@ -143,4 +145,22 @@ test('refused documents stop being stored after the daily limit per ip', functio
     }
     $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', supplierEcfXml(['encf' => 'E310000000792']))])->assertOk();
     expect(ReceivedEcf::query()->where('arecf_status', 1)->count())->toBe(1)->and(ReceivedEcf::query()->where('arecf_status', 0)->count())->toBe(1);
+});
+
+test('a supplier e-cf signed with the certificate of another taxpayer is refused with motivo 2', function () {
+    $response = $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', supplierEcfXml(['encf' => 'E310000000784', 'signer_rnc' => '202020202']))])->assertOk();
+    $x = new DOMXPath(tap(new DOMDocument, fn ($d) => $d->loadXML($response->getContent())));
+    expect($x->evaluate('string(//Estado)'))->toBe('1')->and($x->evaluate('string(//CodigoMotivoNoRecibido)'))->toBe('2')
+        ->and(ReceivedEcf::query()->where('arecf_status', 0)->count())->toBe(0);
+});
+
+test('an incoming commercial approval must be signed by and name the buyer of our e-cf', function () {
+    Bus::fake([SubmitEcfDocument::class]);
+    $doc = issuedInvoice()->ecfDocument;
+    $buyer = FiscalId::normalize((string) $doc->document->client_tax_id);
+    $this->post('/fe/aprobacioncomercial/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', signedAcecfFor($doc, 1, null, $buyer, '202020202'))])->assertStatus(400);
+    $this->post('/fe/aprobacioncomercial/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', signedAcecfFor($doc, 1, null, '202020202', '202020202'))])->assertStatus(400);
+    expect($doc->fresh()->commercial_status)->not->toBe('approved');
+    $this->post('/fe/aprobacioncomercial/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', signedAcecfFor($doc, 1, null))])->assertOk();
+    expect($doc->fresh()->commercial_status)->toBe('approved');
 });

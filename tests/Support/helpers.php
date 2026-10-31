@@ -288,11 +288,11 @@ function signedEcfXml(EcfDocumentData $data): DOMDocument
  * A signed supplier e-CF 31 addressed to the company (comprador_rnc, encf overridable), signed with a separate fake
  * certificate that is never stored.
  *
- * @param  array{encf?: string, comprador_rnc?: string}  $over
+ * @param  array{encf?: string, comprador_rnc?: string, signer_rnc?: string}  $over
  */
 function supplierEcfXml(array $over = []): string
 {
-    openssl_pkcs12_read(fakeP12('x', '101010101'), $bundle, 'x');
+    openssl_pkcs12_read(fakeP12('x', $over['signer_rnc'] ?? '101010101'), $bundle, 'x');
     $data = new EcfDocumentData(
         type: NcfType::E31,
         encf: $over['encf'] ?? 'E310000000777',

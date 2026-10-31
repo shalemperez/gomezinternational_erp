@@ -29,7 +29,13 @@ return [
     'max_attempts' => 48,
     'pending_alert_hours' => 24,
     // Public /fe endpoints (GC-26).
-    'receiver' => ['rate_per_minute' => 60, 'max_bytes' => 1048576, 'refused_per_ip_per_day' => 100],
+    'receiver' => [
+        'rate_per_minute' => 60,
+        'max_bytes' => 1048576,
+        'refused_per_ip_per_day' => 100,
+        // RES §3: the certificate SN may be the delegate's cédula; set false during certification if real supplier certificates do not carry the RNC.
+        'verify_signer_tax_id' => (bool) env('ECF_VERIFY_SIGNER_TAX_ID', true),
+    ],
     'timezone' => 'America/Santo_Domingo',
     // Tabla IV "Codificación Unidad de Medida" by the ERP unit code; unknown codes use 'default' (43 = Unidad).
     'unit_codes' => ['UND' => 43, 'CAJ' => 6, 'BOT' => 5, 'LT' => 24, 'L' => 24, 'KG' => 21, 'DOC' => 13, 'PAQ' => 31, 'PZA' => 34, 'GR' => 17, 'LB' => 23, 'GL' => 15, 'ML' => 59, 'default' => 43],

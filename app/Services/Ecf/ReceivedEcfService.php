@@ -4,7 +4,10 @@ namespace App\Services\Ecf;
 
 use App\Enums\NcfType;
 use App\Exceptions\EcfValidationException;
+use App\Models\CreditNote;
+use App\Models\DebitNote;
 use App\Models\EcfDocument;
+use App\Models\Invoice;
 use App\Models\ReceivedEcf;
 use App\Models\Supplier;
 use App\Services\Settings;
@@ -95,12 +98,17 @@ class ReceivedEcfService
         $rncEmisor = $this->text($xpath, '/ACECF/DetalleAprobacionComercial/RNCEmisor');
         $encf = $this->text($xpath, '/ACECF/DetalleAprobacionComercial/eNCF');
         $estado = $this->text($xpath, '/ACECF/DetalleAprobacionComercial/Estado');
-        if ($rncEmisor !== $this->companyRnc() || ! in_array($estado, ['1', '2'], true)) {
+        $rncComprador = $this->text($xpath, '/ACECF/DetalleAprobacionComercial/RNCComprador');
+        if ($rncEmisor !== $this->companyRnc() || ! in_array($estado, ['1', '2'], true) || ($this->requiresSignerMatch() && $this->signer->signerTaxId($document) !== $rncComprador)) {
             return false;
         }
 
         $ecfDocument = EcfDocument::query()->where('encf', $encf)->first();
         if ($ecfDocument === null) {
+            return false;
+        }
+
+        if (FiscalId::normalize((string) $this->buyerTaxId($ecfDocument)) !== $rncComprador) {
             return false;
         }
 
@@ -181,6 +189,10 @@ class ReceivedEcfService
         }
 
         if (! $this->signer->verify($document)) {
+            return 2;
+        }
+
+        if ($this->requiresSignerMatch() && $this->signer->signerTaxId($document) !== $identity['rnc']) {
             return 2;
         }
 
@@ -308,6 +320,27 @@ class ReceivedEcfService
     private function nullIfBlank(string $value): ?string
     {
         return $value === '' ? null : $value;
+    }
+
+    private function requiresSignerMatch(): bool
+    {
+        return (bool) config('ecf.receiver.verify_signer_tax_id');
+    }
+
+    /** The buyer of an e-CF: the client of an invoice, or of the invoice a credit or debit note adjusts. */
+    private function buyerTaxId(EcfDocument $ecfDocument): ?string
+    {
+        $document = $ecfDocument->document;
+
+        if ($document instanceof Invoice) {
+            return $document->client_tax_id;
+        }
+
+        if ($document instanceof CreditNote || $document instanceof DebitNote) {
+            return $document->invoice?->client_tax_id;
+        }
+
+        return null;
     }
 
     private function companyRnc(): string

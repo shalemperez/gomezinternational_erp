@@ -50,12 +50,48 @@ class XmlSigner
         );
     }
 
-    /** Returns false for a missing signature, a changed reference or a bad signature; never throws. */
+    /**
+     * The digits of the subject serialNumber of the first signing certificate (the taxpayer RNC or cédula), or null when
+     * the certificate is missing or unreadable. Never throws.
+     */
+    public function signerTaxId(DOMDocument $document): ?string
+    {
+        try {
+            $certificate = $document->getElementsByTagNameNS(XMLSecurityDSig::XMLDSIGNS, 'X509Certificate')->item(0)?->textContent;
+            if ($certificate === null || trim($certificate) === '') {
+                return null;
+            }
+
+            $pem = "-----BEGIN CERTIFICATE-----\n".chunk_split((string) preg_replace('/\s+/', '', $certificate), 64, "\n")."-----END CERTIFICATE-----\n";
+            $parsed = openssl_x509_parse($pem);
+            if ($parsed === false) {
+                return null;
+            }
+
+            $serial = $parsed['subject']['serialNumber'] ?? null;
+            if (is_array($serial)) {
+                $serial = $serial[0] ?? null;
+            }
+
+            $digits = preg_replace('/\D+/', '', (string) $serial) ?? '';
+
+            return $digits === '' ? null : $digits;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /**
+     * Returns false for a missing signature, a changed reference or a bad signature; never throws. Verifies a copy because
+     * validateReference() detaches the Signature from the document it is given.
+     */
     public function verify(DOMDocument $document): bool
     {
         try {
+            /** @var DOMDocument $copy */
+            $copy = $document->cloneNode(true);
             $dsig = new XMLSecurityDSig('');
-            $signatureNode = $dsig->locateSignature($document);
+            $signatureNode = $dsig->locateSignature($copy);
             if ($signatureNode === null) {
                 return false;
             }
