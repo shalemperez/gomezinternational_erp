@@ -5,6 +5,7 @@ namespace App\Http\Requests\Admin;
 use App\Enums\NcfType;
 use App\Models\CreditNote;
 use App\Models\DebitNote;
+use App\Models\EcfAnnulmentRange;
 use App\Models\Invoice;
 use App\Models\NcfSequence;
 use App\Services\Fiscal\FiscalNumberingService;
@@ -79,6 +80,16 @@ class StoreNcfSequenceRequest extends FormRequest
                 ->exists();
             if ($overlaps) {
                 $v->errors()->add('range_from', 'El rango se solapa con otra secuencia del mismo tipo.');
+            }
+            $annulled = EcfAnnulmentRange::query()
+                ->where('ncf_type', $type->value)
+                ->where('environment', $this->string('environment')->toString())
+                ->where('range_from', '<=', $this->integer('range_to'))->where('range_to', '>=', $this->integer('range_from'))
+                ->where(fn ($query) => $query->whereNull('ecf_annulment_id')
+                    ->orWhereHas('annulment', fn ($annulment) => $annulment->whereIn('status', ['sending', 'accepted'])))
+                ->exists();
+            if ($annulled) {
+                $v->errors()->add('range_from', 'El rango incluye números anulados o en proceso de anulación ante la DGII.');
             }
             $used = $this->firstUsedNcfInRange($type, $this->integer('range_from'), $this->integer('range_to'), $currentId);
             if ($used !== null) {

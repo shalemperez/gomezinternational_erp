@@ -7,6 +7,7 @@ use App\Support\Ecf\SecurityCode;
 use App\Support\Ecf\SignedXml;
 use Carbon\CarbonImmutable;
 use DOMDocument;
+use DOMElement;
 use RobRichards\XMLSecLibs\XMLSecEnc;
 use RobRichards\XMLSecLibs\XMLSecurityDSig;
 use RobRichards\XMLSecLibs\XMLSecurityKey;
@@ -57,12 +58,16 @@ class XmlSigner
     public function signerTaxId(DOMDocument $document): ?string
     {
         try {
-            $certificate = $document->getElementsByTagNameNS(XMLSecurityDSig::XMLDSIGNS, 'X509Certificate')->item(0)?->textContent;
-            if ($certificate === null || trim($certificate) === '') {
+            $key = $this->verifiedKey($document);
+            if ($key === null) {
                 return null;
             }
 
-            $pem = "-----BEGIN CERTIFICATE-----\n".chunk_split((string) preg_replace('/\s+/', '', $certificate), 64, "\n")."-----END CERTIFICATE-----\n";
+            $pem = $key->getX509Certificate();
+            if (! $pem) {
+                return null;
+            }
+
             $parsed = openssl_x509_parse($pem);
             if ($parsed === false) {
                 return null;
@@ -87,30 +92,45 @@ class XmlSigner
      */
     public function verify(DOMDocument $document): bool
     {
+        return $this->verifiedKey($document) !== null;
+    }
+
+    /**
+     * The key that verified the signature, or null. Refuses a signature whose key info carries more than one certificate
+     * or a bare public key. Never throws.
+     */
+    private function verifiedKey(DOMDocument $document): ?XMLSecurityKey
+    {
         try {
             /** @var DOMDocument $copy */
             $copy = $document->cloneNode(true);
             $dsig = new XMLSecurityDSig('');
             $signatureNode = $dsig->locateSignature($copy);
-            if ($signatureNode === null) {
-                return false;
+            if (! $signatureNode instanceof DOMElement) {
+                return null;
+            }
+
+            $x509Count = $signatureNode->getElementsByTagNameNS(XMLSecurityDSig::XMLDSIGNS, 'X509Certificate')->length;
+            $keyValueCount = $signatureNode->getElementsByTagNameNS(XMLSecurityDSig::XMLDSIGNS, 'KeyValue')->length;
+            if ($x509Count !== 1 || $keyValueCount !== 0) {
+                return null; // exactly one certificate and no bare public key: the verifying key is the certificate we read the tax id from
             }
 
             $dsig->canonicalizeSignedInfo();
             if (! $dsig->validateReference()) {
-                return false;
+                return null;
             }
 
             $key = $dsig->locateKey();
             if ($key === null) {
-                return false;
+                return null;
             }
 
             XMLSecEnc::staticLocateKeyInfo($key, $signatureNode);
 
-            return $dsig->verify($key) === 1;
+            return $dsig->verify($key) === 1 ? $key : null;
         } catch (Throwable) {
-            return false;
+            return null;
         }
     }
 }
