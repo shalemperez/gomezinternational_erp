@@ -62,7 +62,7 @@ class ReceivedEcfService
         $arecf = $this->acknowledgement($acknowledged['rnc'], $acknowledged['encf'], $companyRnc, $status, $reason, $now);
 
         $received = null;
-        if ($document !== null && $identity !== null && ! $duplicate) {
+        if ($document !== null && $identity !== null && ! $duplicate && ($reason === null || ! $this->refusedLimitReached($senderIp))) {
             try {
                 $received = $this->storeReceipt($xml, $document, $identity, $status, $reason, $senderIp, $arecf, $now);
             } catch (Throwable $exception) {
@@ -195,6 +195,12 @@ class ReceivedEcfService
             ->where('encf', $identity['encf'])
             ->where('arecf_status', 0)
             ->exists();
+    }
+
+    /** Refused documents stop being stored for an IP after the daily limit (GC-26); the ARECF is still answered. */
+    private function refusedLimitReached(?string $senderIp): bool
+    {
+        return $senderIp !== null && ReceivedEcf::query()->where('sender_ip', $senderIp)->where('arecf_status', 1)->where('received_at', '>=', now()->subDay())->count() >= (int) config('ecf.receiver.refused_per_ip_per_day');
     }
 
     /**

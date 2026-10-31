@@ -121,3 +121,26 @@ test('a utf-16 document with a doctype is refused after parsing without being st
     $x = new DOMXPath(tap(new DOMDocument, fn ($d) => $d->loadXML($response->getContent())));
     expect($x->evaluate('string(//Estado)'))->toBe('1')->and($x->evaluate('string(//CodigoMotivoNoRecibido)'))->toBe('1')->and(ReceivedEcf::count())->toBe(0);
 });
+
+test('the public receiver endpoints are rate limited per ip', function () {
+    config(['ecf.receiver.rate_per_minute' => 2]);
+    $this->post('/fe/recepcion/api/ecf', ['xml' => 'not xml'])->assertOk();
+    $this->post('/fe/recepcion/api/ecf', ['xml' => 'not xml'])->assertOk();
+    $this->post('/fe/aprobacioncomercial/api/ecf', ['xml' => 'not xml'])->assertStatus(429);
+});
+
+test('requests larger than the receiver limit are refused with 413', function () {
+    config(['ecf.receiver.max_bytes' => 1000]);
+    $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', str_repeat('a', 1001))])->assertStatus(413);
+    $this->post('/fe/recepcion/api/ecf', ['xml' => str_repeat('a', 1001)])->assertStatus(413);
+    expect(ReceivedEcf::count())->toBe(0);
+});
+
+test('refused documents stop being stored after the daily limit per ip', function () {
+    config(['ecf.receiver.refused_per_ip_per_day' => 1]);
+    foreach (['E310000000790', 'E310000000791'] as $encf) {
+        $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', supplierEcfXml(['encf' => $encf, 'comprador_rnc' => '999999999']))])->assertOk();
+    }
+    $this->post('/fe/recepcion/api/ecf', ['xml' => UploadedFile::fake()->createWithContent('x.xml', supplierEcfXml(['encf' => 'E310000000792']))])->assertOk();
+    expect(ReceivedEcf::query()->where('arecf_status', 1)->count())->toBe(1)->and(ReceivedEcf::query()->where('arecf_status', 0)->count())->toBe(1);
+});
