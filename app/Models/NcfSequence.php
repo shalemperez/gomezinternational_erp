@@ -20,7 +20,7 @@ class NcfSequence extends Model
     /** @use HasFactory<NcfSequenceFactory> */
     use HasFactory, LogsModelActivity;
 
-    protected $fillable = ['ncf_type', 'range_from', 'range_to', 'next_number', 'expires_on', 'authorization_number', 'is_active', 'exhausted_at', 'notes'];
+    protected $fillable = ['ncf_type', 'environment', 'range_from', 'range_to', 'next_number', 'expires_on', 'authorization_number', 'is_active', 'exhausted_at', 'notes'];
 
     protected function casts(): array
     {

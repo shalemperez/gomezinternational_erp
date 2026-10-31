@@ -12,6 +12,17 @@ export type NcfSequenceRow = {
     is_active: boolean;
     exhausted_at: string | null;
     notes: string | null;
+    environment: string;
+    environment_label: string;
+    sequence_digits: number;
+};
+
+export type NcfTypeOption = {
+    value: string;
+    label: string;
+    expires: boolean;
+    electronic: boolean;
+    sequence_digits: number;
 };
 
 export type SequenceAlert = {

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ConfirmDelete } from '@/components/erp/confirm-delete';
 import { DocumentHeader } from '@/components/erp/document-header';
 import { DocumentLinesEditor } from '@/components/erp/document-lines-editor';
+import { EcfStatusCard } from '@/components/erp/ecf-status-card';
 import { RecordHistory } from '@/components/erp/record-history';
 import { SendEmailDialog } from '@/components/erp/send-email-dialog';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
@@ -48,7 +49,9 @@ import {
     create as createReceipt,
     show as showReceipt,
 } from '@/routes/sales/receipts';
+import { useCan } from '@/lib/can';
 import type { AuditEntry } from '@/types/audit';
+import type { EcfSummary } from '@/types/ecf';
 import type {
     ComputedTotals,
     DocumentLineInput,
@@ -58,6 +61,7 @@ import type {
 
 type Props = {
     invoice: Invoice;
+    ecf: EcfSummary | null;
     history: AuditEntry[];
     emails: SentEmailRow[];
     dispatches: {
@@ -97,6 +101,7 @@ const paymentTermsLabels: Record<string, string> = {
 
 export default function InvoiceShow({
     invoice,
+    ecf,
     history,
     emails,
     dispatches,
@@ -290,6 +295,8 @@ export default function InvoiceShow({
             : []),
     ];
 
+    const can = useCan();
+
     return (
         <>
             <Head title={`Factura ${invoice.number ?? 'borrador'}`} />
@@ -310,6 +317,13 @@ export default function InvoiceShow({
                             {invoice.cancel_reason}
                         </AlertDescription>
                     </Alert>
+                )}
+
+                {ecf && (
+                    <EcfStatusCard
+                        ecf={ecf}
+                        canManage={can('fiscal.ecf.manage')}
+                    />
                 )}
 
                 <Tabs defaultValue="lineas">

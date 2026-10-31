@@ -1,9 +1,11 @@
 <?php
 
+use App\Jobs\CheckEcfAlerts;
 use App\Jobs\CheckNcfSequences;
 use App\Jobs\CheckStockAlerts;
 use App\Jobs\ExpireProformas;
 use App\Jobs\FetchDailyExchangeRates;
+use App\Jobs\RetryPendingEcfDocuments;
 use App\Services\Settings;
 use Illuminate\Foundation\Inspiring;
 use Illuminate\Support\Facades\Artisan;
@@ -22,3 +24,7 @@ Schedule::job(new CheckNcfSequences)->dailyAt('07:30');
 Schedule::job(new CheckStockAlerts)->dailyAt('07:35');
 
 Schedule::job(new ExpireProformas)->dailyAt('00:10');
+
+Schedule::job(new RetryPendingEcfDocuments)->everyFiveMinutes();
+
+Schedule::job(new CheckEcfAlerts)->dailyAt('07:40');

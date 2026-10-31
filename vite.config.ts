@@ -70,6 +70,7 @@ export default defineConfig({
             'resources/views/mail/*',
             'docs/**',
             '.superpowers/**',
+            'resources/xsd/**',
             '.claude/**',
             '.ai/**',
             'AGENTS.md',

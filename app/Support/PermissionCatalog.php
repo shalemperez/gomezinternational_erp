@@ -128,6 +128,18 @@ final class PermissionCatalog
         $add('fiscal.sequences.manage', 'Administrar secuencias NCF', ['owner', 'accounting']);
         $add('fiscal.mode.manage', 'Cambiar modo fiscal (NCF/e-CF)', ['owner']);
 
+        // fiscal e-CF (phase 3)
+        $add('fiscal.ecf.view', 'Ver comprobantes electrónicos (e-CF)', [...$all, 'sales']);
+        $add('fiscal.ecf.manage', 'Reintentar y consultar e-CF ante la DGII', $all);
+        $add('fiscal.ecf.export', 'Exportar comprobantes electrónicos', $all);
+        $add('fiscal.ecf.settings', 'Configurar facturación electrónica (proveedor, ambiente, certificado)', ['owner']);
+        $add('fiscal.ecf.annul', 'Anular secuencias e-NCF no utilizadas', ['owner', 'accounting']);
+        $add('fiscal.ecf.certification', 'Ejecutar el proceso de certificación DGII', ['owner', 'accounting']);
+        $add('fiscal.ecf.alerts', 'Recibir alertas de e-CF rechazados o pendientes', ['owner', 'management', 'accounting']);
+        $add('fiscal.received-ecf.view', 'Ver e-CF recibidos de proveedores', $all);
+        $add('fiscal.received-ecf.approve', 'Aprobar o rechazar comercialmente e-CF recibidos', ['owner', 'accounting']);
+        $add('fiscal.received-ecf.export', 'Exportar e-CF recibidos', $all);
+
         // inventory (phase 2 subset)
         $add('inventory.stock.view', 'Ver existencias', [...$all, 'sales', 'warehouse']);
         $add('inventory.stock.view-costs', 'Ver costos de inventario', $all);

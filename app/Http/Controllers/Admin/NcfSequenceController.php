@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Admin;
 
+use App\Enums\EcfEnvironment;
 use App\Enums\NcfType;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreNcfSequenceRequest;
@@ -23,7 +24,15 @@ class NcfSequenceController extends Controller
     public function index(Request $request): Response
     {
         $rows = TableQuery::apply(NcfSequence::query(), $request, [], ['ncf_type', 'range_from', 'expires_on', 'is_active'], 'ncf_type', 'asc')
-            ->through(fn (NcfSequence $sequence) => [...$sequence->toArray(), 'ncf_type' => $sequence->ncf_type->value, 'label' => $sequence->ncf_type->label(), 'remaining' => $sequence->remaining, 'used' => $sequence->used]);
+            ->through(fn (NcfSequence $sequence) => [
+                ...$sequence->toArray(),
+                'ncf_type' => $sequence->ncf_type->value,
+                'label' => $sequence->ncf_type->label(),
+                'remaining' => $sequence->remaining,
+                'used' => $sequence->used,
+                'environment_label' => EcfEnvironment::from($sequence->environment)->label(),
+                'sequence_digits' => $sequence->ncf_type->sequenceDigits(),
+            ]);
 
         return Inertia::render('admin/ncf-sequences/index', [
             'rows' => $rows,
@@ -31,6 +40,7 @@ class NcfSequenceController extends Controller
             'alerts' => app(SequenceAlerts::class)->current(),
             'canManage' => $request->user()->can('fiscal.sequences.manage'),
             'fiscalMode' => app(FiscalNumberingService::class)->mode(),
+            'environment' => app(FiscalNumberingService::class)->environment(),
         ]);
     }
 
@@ -78,10 +88,19 @@ class NcfSequenceController extends Controller
     private function formOptions(): array
     {
         $types = collect(NcfType::cases())
-            ->filter(fn (NcfType $type) => $type->isSalesType() || in_array($type, [NcfType::B11, NcfType::B13, NcfType::B17], true))
-            ->map(fn (NcfType $type) => ['value' => $type->value, 'label' => $type->label(), 'expires' => $type->expires()])
+            ->filter(fn (NcfType $type) => $type->isSalesType() || in_array($type, [NcfType::B11, NcfType::B13, NcfType::B17, NcfType::E41, NcfType::E43, NcfType::E47], true))
+            ->map(fn (NcfType $type) => [
+                'value' => $type->value,
+                'label' => $type->label(),
+                'expires' => $type->expires(),
+                'electronic' => $type->isElectronic(),
+                'sequence_digits' => $type->sequenceDigits(),
+            ])
             ->values();
 
-        return ['types' => $types];
+        return [
+            'types' => $types,
+            'environmentLabel' => EcfEnvironment::from(app(FiscalNumberingService::class)->environment())->label(),
+        ];
     }
 }

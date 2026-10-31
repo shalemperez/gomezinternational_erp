@@ -6,6 +6,7 @@ use App\Enums\CreditNoteReason;
 use App\Enums\DocumentKind;
 use App\Enums\InvoiceStatus;
 use App\Exceptions\DocumentStateException;
+use App\Jobs\SubmitEcfDocument;
 use App\Models\CreditNote;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
@@ -15,6 +16,7 @@ use App\Services\Documents\DocumentLines;
 use App\Services\Documents\DocumentNumbering;
 use App\Services\Documents\DocumentPdf;
 use App\Services\Documents\DocumentTotalsCalculator;
+use App\Services\Ecf\EcfService;
 use App\Services\Fiscal\FiscalNumberingService;
 use App\Services\Fiscal\NcfTypeResolver;
 use App\Services\Inventory\InventoryService;
@@ -33,6 +35,7 @@ class IssueCreditNote
         private readonly NcfTypeResolver $resolver,
         private readonly InventoryService $inventory,
         private readonly AccountingEventRecorder $events,
+        private readonly EcfService $ecf,
     ) {}
 
     /** @param array<string, mixed> $data */
@@ -79,7 +82,7 @@ class IssueCreditNote
             $fiscal = $this->numbering->assign($this->resolver->forCreditNote(), $issueDate);
             $note = CreditNote::query()->create([
                 'number' => $this->documentNumbering->next(DocumentKind::CreditNote),
-                'fiscal_mode' => 'ncf',
+                'fiscal_mode' => $fiscal->type->isElectronic() ? 'ecf' : 'ncf',
                 'ncf' => $fiscal->ncf,
                 'ncf_type' => $fiscal->type,
                 'ncf_expires_on' => $fiscal->expiresOn?->toDateString(),
@@ -129,16 +132,20 @@ class IssueCreditNote
             $note->forceFill(['status' => 'issued', 'returned_cost' => $returnedCost, 'issued_at' => now()])->save();
             $invoice->forceFill(['credited_amount' => Decimal::sum([$invoice->credited_amount, $applied])])->save();
             $invoice->refreshFinancials();
+            if ($note->fiscal_mode === 'ecf') {
+                $ecfDocument = $this->ecf->create($note, $fiscal, $actor);
+                SubmitEcfDocument::dispatch($ecfDocument)->afterCommit();
+            }
 
             activity('credit_notes')->causedBy($actor)->performedOn($note)->event('issued')
                 ->withProperties(['number' => $note->number, 'ncf' => $note->ncf, 'reason' => $reason->value, 'total' => $note->total])
-                ->log("Nota de crédito {$note->number} emitida con NCF {$note->ncf}");
+                ->log("Nota de crédito {$note->number} emitida con ".($note->fiscal_mode === 'ecf' ? 'e-NCF' : 'NCF')." {$note->ncf}");
             activity('invoices')->causedBy($actor)->performedOn($invoice)->event('credit_note_applied')
                 ->withProperties(['credit_note_id' => $note->id, 'total' => $note->total, 'applied_amount' => $applied, 'unapplied_amount' => $unapplied])
                 ->log("Nota de crédito {$note->number} aplicada a la factura {$invoice->number}");
 
             $this->events->record('credit_note_issued', $note, [
-                'number' => $note->number, 'ncf' => $note->ncf, 'ncf_type' => $note->ncf_type->value, 'modified_ncf' => $note->modified_ncf,
+                'number' => $note->number, 'ncf' => $note->ncf, 'ncf_type' => $note->ncf_type->value, 'fiscal_mode' => $note->fiscal_mode, 'modified_ncf' => $note->modified_ncf,
                 'invoice_id' => $invoice->id, 'invoice_number' => $invoice->number, 'client_id' => $note->client_id, 'reason' => $reason->value,
                 'returns_stock' => $reason === CreditNoteReason::Return, 'issue_date' => $note->issue_date->toDateString(),
                 'subtotal' => $note->subtotal, 'discount_total' => $note->discount_total, 'taxable_total' => $note->taxable_total,

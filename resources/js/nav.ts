@@ -1,17 +1,22 @@
 import {
     ArrowLeftRight,
+    Ban,
     Banknote,
     Boxes,
     Building2,
     CalendarClock,
+    ClipboardCheck,
     ClipboardList,
     Coins,
+    FileBadge,
+    FileCheck,
     FileMinus,
     FilePlus,
     FileSpreadsheet,
     FileText,
     HandCoins,
     Hash,
+    Inbox,
     LayoutGrid,
     Layers,
     Mail,
@@ -201,6 +206,35 @@ export const navGroups: NavGroup[] = [
         ],
     },
     {
+        label: 'Fiscal',
+        items: [
+            {
+                title: 'Comprobantes electrónicos',
+                href: '/fiscal/ecf-documents',
+                icon: FileBadge,
+                permission: 'fiscal.ecf.view',
+            },
+            {
+                title: 'e-CF recibidos',
+                href: '/fiscal/received-ecfs',
+                icon: Inbox,
+                permission: 'fiscal.received-ecf.view',
+            },
+            {
+                title: 'Anulación de e-NCF',
+                href: '/fiscal/ecf-annulments',
+                icon: Ban,
+                permission: 'fiscal.ecf.annul',
+            },
+            {
+                title: 'Certificación DGII',
+                href: '/fiscal/certification',
+                icon: ClipboardCheck,
+                permission: 'fiscal.ecf.certification',
+            },
+        ],
+    },
+    {
         label: 'Administración',
         items: [
             {
@@ -226,6 +260,12 @@ export const navGroups: NavGroup[] = [
                 href: '/admin/ncf-sequences',
                 icon: Hash,
                 permission: 'fiscal.sequences.view',
+            },
+            {
+                title: 'Facturación electrónica',
+                href: '/admin/ecf-settings',
+                icon: FileCheck,
+                permission: 'fiscal.ecf.settings',
             },
             {
                 title: 'Plantillas de correo',

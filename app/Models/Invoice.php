@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\MorphOne;
 use Illuminate\Support\Carbon;
 
 /**
@@ -161,6 +162,12 @@ class Invoice extends Model implements HasDocumentLines
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');
+    }
+
+    /** @return MorphOne<EcfDocument, $this> */
+    public function ecfDocument(): MorphOne
+    {
+        return $this->morphOne(EcfDocument::class, 'document');
     }
 
     /** @return HasMany<InvoiceLine, $this> */

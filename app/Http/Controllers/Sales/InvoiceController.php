@@ -31,6 +31,7 @@ use App\Models\SentEmail;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Documents\DocumentPdf;
+use App\Services\Ecf\EcfPdfData;
 use App\Services\Settings;
 use App\Support\AuditHistory;
 use App\Support\TableQuery;
@@ -85,6 +86,7 @@ class InvoiceController extends Controller
 
         return Inertia::render('sales/invoices/show', [
             'invoice' => $this->invoiceProps($invoice, $user),
+            'ecf' => $invoice->fiscal_mode === 'ecf' ? $invoice->ecfDocument?->summary() : null,
             'history' => AuditHistory::for($invoice),
             'emails' => $this->emailRows($invoice),
             'dispatches' => $this->dispatchRows($invoice),
@@ -162,7 +164,7 @@ class InvoiceController extends Controller
 
         $issued = $issueInvoice->handle($invoice, $user, $creditOverride, $request->string('credit_override_reason')->trim()->toString() ?: null);
 
-        return redirect()->route('sales.invoices.show', $issued)->with('success', "Factura {$issued->number} emitida con NCF {$issued->ncf}");
+        return redirect()->route('sales.invoices.show', $issued)->with('success', "Factura {$issued->number} emitida con ".($issued->fiscal_mode === 'ecf' ? 'e-NCF' : 'NCF')." {$issued->ncf}");
     }
 
     #[Middleware('permission:sales.invoices.cancel')]
@@ -255,11 +257,12 @@ class InvoiceController extends Controller
     /** @return array<string, mixed> */
     public function pdfData(Invoice $invoice): array
     {
-        $invoice->load('lines.product', 'client', 'salesperson', 'currency');
+        $invoice->load('lines.product.unit', 'client', 'salesperson', 'currency');
 
         return [
             'invoice' => $invoice,
-            'lines' => $invoice->lines->map(fn (InvoiceLine $line) => $line->toArray())->values()->all(),
+            'lines' => $invoice->lines->map(fn (InvoiceLine $line) => [...$line->toArray(), 'unit' => $line->product?->unit?->name])->values()->all(),
+            'ecf' => EcfPdfData::for($invoice),
             'totals' => [
                 'subtotal' => $invoice->subtotal,
                 'discount_total' => $invoice->discount_total,

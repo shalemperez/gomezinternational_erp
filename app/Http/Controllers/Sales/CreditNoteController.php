@@ -16,6 +16,7 @@ use App\Models\Lot;
 use App\Models\User;
 use App\Models\Warehouse;
 use App\Services\Documents\DocumentPdf;
+use App\Services\Ecf\EcfPdfData;
 use App\Support\AuditHistory;
 use App\Support\Money\Decimal;
 use App\Support\TableQuery;
@@ -75,7 +76,7 @@ class CreditNoteController extends Controller
         $invoice = Invoice::query()->whereKey($request->integer('invoice_id'))->firstOrFail();
         $creditNote = $issueCreditNote->handle($request->validated(), $invoice, $this->actor($request));
 
-        return redirect()->route('sales.credit-notes.show', $creditNote)->with('success', "Nota de crédito {$creditNote->number} emitida con NCF {$creditNote->ncf}");
+        return redirect()->route('sales.credit-notes.show', $creditNote)->with('success', "Nota de crédito {$creditNote->number} emitida con ".($creditNote->fiscal_mode === 'ecf' ? 'e-NCF' : 'NCF')." {$creditNote->ncf}");
     }
 
     #[Middleware('permission:sales.credit-notes.view')]
@@ -87,6 +88,7 @@ class CreditNoteController extends Controller
 
         return Inertia::render('sales/credit-notes/show', [
             'creditNote' => [...Arr::except($creditNote->toArray(), $canViewCosts ? [] : ['returned_cost']), 'reason_label' => $creditNote->reason->label(), 'ncf_type_label' => $creditNote->ncf_type->label()],
+            'ecf' => $creditNote->fiscal_mode === 'ecf' ? $creditNote->ecfDocument?->summary() : null,
             'history' => AuditHistory::for($creditNote),
             'openInvoices' => Invoice::query()->visibleTo($this->actor($request))->where('client_id', $creditNote->client_id)->where('currency_id', $creditNote->currency_id)
                 ->whereIn('status', [InvoiceStatus::Issued, InvoiceStatus::PartiallyPaid])->orderBy('issue_date')
@@ -141,11 +143,12 @@ class CreditNoteController extends Controller
     /** @return array<string, mixed> */
     public function pdfData(CreditNote $creditNote): array
     {
-        $creditNote->load('lines', 'invoice', 'currency');
+        $creditNote->load('lines.product.unit', 'invoice', 'currency');
 
         return [
             'creditNote' => $creditNote,
-            'lines' => $creditNote->lines->map(fn ($line) => $line->toArray())->values()->all(),
+            'lines' => $creditNote->lines->map(fn ($line) => [...$line->toArray(), 'unit' => $line->product?->unit?->name])->values()->all(),
+            'ecf' => EcfPdfData::for($creditNote),
             'totals' => [
                 'subtotal' => $creditNote->subtotal,
                 'discount_total' => $creditNote->discount_total,

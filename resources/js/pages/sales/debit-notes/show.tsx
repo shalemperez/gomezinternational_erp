@@ -1,5 +1,6 @@
 import { Head, Link } from '@inertiajs/react';
 import { DocumentHeader } from '@/components/erp/document-header';
+import { EcfStatusCard } from '@/components/erp/ecf-status-card';
 import { RecordHistory } from '@/components/erp/record-history';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -11,18 +12,23 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useCan } from '@/lib/can';
 import { formatDate, formatMoney, formatNumber } from '@/lib/format';
 import { index, pdf } from '@/routes/sales/debit-notes';
 import { show as showInvoice } from '@/routes/sales/invoices';
 import type { AuditEntry } from '@/types/audit';
+import type { EcfSummary } from '@/types/ecf';
 import type { DebitNote } from '@/types/sales';
 
 type Props = {
     debitNote: DebitNote;
+    ecf: EcfSummary | null;
     history: AuditEntry[];
 };
 
-export default function DebitNoteShow({ debitNote, history }: Props) {
+export default function DebitNoteShow({ debitNote, ecf, history }: Props) {
+    const can = useCan();
+
     const currency = debitNote.currency?.code === 'USD' ? 'USD' : 'DOP';
 
     const meta = [
@@ -71,6 +77,13 @@ export default function DebitNoteShow({ debitNote, history }: Props) {
                         </Button>
                     }
                 />
+
+                {ecf && (
+                    <EcfStatusCard
+                        ecf={ecf}
+                        canManage={can('fiscal.ecf.manage')}
+                    />
+                )}
 
                 <Tabs defaultValue="lineas">
                     <TabsList>

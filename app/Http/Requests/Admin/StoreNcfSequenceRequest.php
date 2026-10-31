@@ -5,8 +5,10 @@ namespace App\Http\Requests\Admin;
 use App\Enums\NcfType;
 use App\Models\CreditNote;
 use App\Models\DebitNote;
+use App\Models\EcfAnnulmentRange;
 use App\Models\Invoice;
 use App\Models\NcfSequence;
+use App\Services\Fiscal\FiscalNumberingService;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -26,6 +28,8 @@ class StoreNcfSequenceRequest extends FormRequest
         foreach ($this->booleans as $field) {
             $this->merge([$field => $this->boolean($field)]);
         }
+        $type = NcfType::tryFrom($this->string('ncf_type')->toString());
+        $this->merge(['environment' => $type?->isElectronic() ? app(FiscalNumberingService::class)->environment() : 'prod']);
         foreach (['expires_on', 'authorization_number', 'notes'] as $field) {
             if ($this->input($field) === '') {
                 $this->merge([$field => null]);
@@ -38,8 +42,9 @@ class StoreNcfSequenceRequest extends FormRequest
     {
         return [
             'ncf_type' => ['required', Rule::enum(NcfType::class)],
-            'range_from' => ['required', 'integer', 'between:1,99999999'],
-            'range_to' => ['required', 'integer', 'between:1,99999999', 'gte:range_from'],
+            'environment' => ['required', Rule::in(['test', 'cert', 'prod'])],
+            'range_from' => ['required', 'integer', 'min:1'],
+            'range_to' => ['required', 'integer', 'min:1', 'gte:range_from'],
             'expires_on' => ['nullable', 'date_format:Y-m-d'],
             'authorization_number' => ['nullable', 'string', 'max:50'],
             'notes' => ['nullable', 'string', 'max:255'],
@@ -57,6 +62,11 @@ class StoreNcfSequenceRequest extends FormRequest
             if ($type->expires() && blank($this->input('expires_on'))) {
                 $v->errors()->add('expires_on', 'Este tipo de comprobante requiere fecha de vencimiento (Norma General 06-2018, art. 6).');
             }
+            foreach (['range_from', 'range_to'] as $field) {
+                if ($this->integer($field) > $type->maxSequence()) {
+                    $v->errors()->add($field, "El rango de {$type->value} admite hasta {$type->sequenceDigits()} dígitos.");
+                }
+            }
             if ($v->errors()->has('range_from') || $v->errors()->has('range_to')) {
                 return;
             }
@@ -64,11 +74,22 @@ class StoreNcfSequenceRequest extends FormRequest
             $currentId = $current instanceof NcfSequence ? $current->getKey() : null;
             $overlaps = NcfSequence::query()
                 ->where('ncf_type', $type->value)
+                ->where('environment', $this->string('environment')->toString())
                 ->where(fn ($query) => $query->where('range_from', '<=', $this->integer('range_to'))->where('range_to', '>=', $this->integer('range_from')))
                 ->when($currentId !== null, fn ($query) => $query->whereKeyNot($currentId))
                 ->exists();
             if ($overlaps) {
                 $v->errors()->add('range_from', 'El rango se solapa con otra secuencia del mismo tipo.');
+            }
+            $annulled = EcfAnnulmentRange::query()
+                ->where('ncf_type', $type->value)
+                ->where('environment', $this->string('environment')->toString())
+                ->where('range_from', '<=', $this->integer('range_to'))->where('range_to', '>=', $this->integer('range_from'))
+                ->where(fn ($query) => $query->whereNull('ecf_annulment_id')
+                    ->orWhereHas('annulment', fn ($annulment) => $annulment->whereIn('status', ['sending', 'accepted'])))
+                ->exists();
+            if ($annulled) {
+                $v->errors()->add('range_from', 'El rango incluye números anulados o en proceso de anulación ante la DGII.');
             }
             $used = $this->firstUsedNcfInRange($type, $this->integer('range_from'), $this->integer('range_to'), $currentId);
             if ($used !== null) {
@@ -83,7 +104,7 @@ class StoreNcfSequenceRequest extends FormRequest
         $found = [];
         foreach ([Invoice::class, CreditNote::class, DebitNote::class] as $model) {
             $ncf = $model::query()->where('ncf_type', $type->value)
-                ->whereRaw('CAST(SUBSTR(ncf, 4) AS INTEGER) BETWEEN ? AND ?', [$from, $to])
+                ->whereRaw('CAST(SUBSTR(ncf, 4) AS BIGINT) BETWEEN ? AND ?', [$from, $to])
                 ->when($excludeSequenceId !== null, fn ($query) => $query->where(fn ($q) => $q->whereNull('ncf_sequence_id')->orWhere('ncf_sequence_id', '!=', $excludeSequenceId)))
                 ->orderBy('ncf')->value('ncf');
             if ($ncf !== null) {

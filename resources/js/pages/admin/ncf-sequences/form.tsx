@@ -22,7 +22,7 @@ import {
     update,
 } from '@/routes/admin/ncf-sequences';
 import type { AuditEntry } from '@/types/audit';
-import type { NcfSequenceRow } from '@/types/fiscal';
+import type { NcfSequenceRow, NcfTypeOption } from '@/types/fiscal';
 
 type Props = {
     ncfSequence?: Pick<
@@ -38,13 +38,15 @@ type Props = {
         | 'notes'
     >;
     history?: AuditEntry[];
-    types: { value: string; label: string; expires: boolean }[];
+    types: NcfTypeOption[];
+    environmentLabel: string;
 };
 
 export default function NcfSequenceForm({
     ncfSequence,
     history,
     types,
+    environmentLabel,
 }: Props) {
     const title = ncfSequence ? 'Editar secuencia' : 'Nueva secuencia';
     const [ncfType, setNcfType] = useState<string>(
@@ -53,8 +55,9 @@ export default function NcfSequenceForm({
     const isUsed =
         ncfSequence !== undefined &&
         ncfSequence.next_number > ncfSequence.range_from;
-    const expires =
-        types.find((option) => option.value === ncfType)?.expires ?? true;
+    const selectedType = types.find((option) => option.value === ncfType);
+    const expires = selectedType?.expires ?? true;
+    const sequenceMax = 10 ** (selectedType?.sequence_digits ?? 8) - 1;
 
     const form = (
         <Form
@@ -67,6 +70,11 @@ export default function NcfSequenceForm({
                         label="Tipo"
                         htmlFor="ncf_type"
                         error={errors.ncf_type}
+                        hint={
+                            selectedType?.electronic
+                                ? `Las secuencias electrónicas se registran para el ambiente ${environmentLabel}.`
+                                : undefined
+                        }
                         required
                     >
                         <Select
@@ -101,7 +109,7 @@ export default function NcfSequenceForm({
                             name="range_from"
                             type="number"
                             min={1}
-                            max={99999999}
+                            max={sequenceMax}
                             defaultValue={ncfSequence?.range_from}
                             required
                         />
@@ -117,7 +125,7 @@ export default function NcfSequenceForm({
                             name="range_to"
                             type="number"
                             min={1}
-                            max={99999999}
+                            max={sequenceMax}
                             defaultValue={ncfSequence?.range_to}
                             required
                         />

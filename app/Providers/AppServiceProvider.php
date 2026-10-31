@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\EcfProvider;
 use App\Contracts\GmailSender;
 use App\Listeners\LogAccessChanges;
 use App\Models\ActivityLog;
@@ -16,15 +17,19 @@ use App\Policies\DebitNotePolicy;
 use App\Policies\InvoicePolicy;
 use App\Policies\ProformaPolicy;
 use App\Policies\ReceiptPolicy;
+use App\Services\Ecf\EcfService;
 use App\Services\Mail\GoogleGmailSender;
 use App\Services\Mail\LogGmailSender;
 use App\Services\Settings;
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Middleware\TrustProxies;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -41,6 +46,7 @@ class AppServiceProvider extends ServiceProvider
     public function register(): void
     {
         $this->app->singleton(Settings::class);
+        $this->app->bind(EcfProvider::class, fn () => $this->app->make(EcfService::class)->provider());
         $this->app->bind(GmailSender::class, fn () => config('erp.gmail.driver') === 'google' ? $this->app->make(GoogleGmailSender::class) : $this->app->make(LogGmailSender::class));
     }
 
@@ -51,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         self::configureTrustedProxies();
+        $this->configureRateLimiting();
 
         Gate::before(fn (User $user, string $ability) => $user->isSuperAdmin() ? true : null);
         Gate::policy(Proforma::class, ProformaPolicy::class);
@@ -88,6 +95,14 @@ class AppServiceProvider extends ServiceProvider
         if ($trusted !== '') {
             TrustProxies::at($trusted === '*' ? '*' : array_map('trim', explode(',', $trusted)));
         }
+    }
+
+    /**
+     * Caps the public /fe endpoints per IP (GC-26).
+     */
+    private function configureRateLimiting(): void
+    {
+        RateLimiter::for('fe', fn (Request $request) => Limit::perMinute((int) config('ecf.receiver.rate_per_minute'))->by((string) $request->ip()));
     }
 
     /**

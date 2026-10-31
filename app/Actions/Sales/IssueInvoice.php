@@ -8,6 +8,7 @@ use App\Enums\NcfType;
 use App\Enums\PaymentTerms;
 use App\Enums\ProformaStatus;
 use App\Exceptions\DocumentStateException;
+use App\Jobs\SubmitEcfDocument;
 use App\Models\Client;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
@@ -20,6 +21,7 @@ use App\Services\Documents\DocumentLines;
 use App\Services\Documents\DocumentNumbering;
 use App\Services\Documents\DocumentPdf;
 use App\Services\Documents\DocumentTotalsCalculator;
+use App\Services\Ecf\EcfService;
 use App\Services\Fiscal\FiscalNumberingService;
 use App\Services\Fiscal\NcfTypeResolver;
 use App\Services\Inventory\InventoryService;
@@ -41,6 +43,7 @@ class IssueInvoice
         private readonly InventoryService $inventory,
         private readonly AccountingEventRecorder $events,
         private readonly Settings $settings,
+        private readonly EcfService $ecf,
     ) {}
 
     public function handle(Invoice $invoice, User $actor, bool $creditOverride = false, ?string $creditOverrideReason = null): Invoice
@@ -55,9 +58,6 @@ class IssueInvoice
             }
             if (! $invoice->client->is_active) {
                 throw new DocumentStateException('El cliente está inactivo');
-            }
-            if ($this->numbering->mode() !== 'ncf') {
-                throw new DocumentStateException('El modo fiscal e-CF se habilita en la fase 3');
             }
 
             $issueDate = CarbonImmutable::today();
@@ -85,7 +85,7 @@ class IssueInvoice
                 'ncf_type' => $fiscal->type,
                 'ncf_expires_on' => $fiscal->expiresOn?->toDateString(),
                 'ncf_sequence_id' => $fiscal->sequenceId,
-                'fiscal_mode' => 'ncf',
+                'fiscal_mode' => $fiscal->type->isElectronic() ? 'ecf' : 'ncf',
                 'client_name' => $invoice->client->business_name,
                 'client_tax_id' => $invoice->client->tax_id,
                 'client_tax_id_type' => $invoice->client->tax_id_type->value,
@@ -97,13 +97,17 @@ class IssueInvoice
                 'issued_at' => now(),
             ])->save();
             $this->invoiceProformaLines($invoice, $actor);
+            if ($invoice->fiscal_mode === 'ecf') {
+                $ecfDocument = $this->ecf->create($invoice, $fiscal, $actor);
+                SubmitEcfDocument::dispatch($ecfDocument)->afterCommit();
+            }
 
             activity('invoices')->causedBy($actor)->performedOn($invoice)->event('issued')
                 ->withProperties(['number' => $invoice->number, 'ncf' => $invoice->ncf, 'total' => $invoice->total])
-                ->log("Factura {$invoice->number} emitida con NCF {$invoice->ncf}");
+                ->log("Factura {$invoice->number} emitida con ".($invoice->fiscal_mode === 'ecf' ? 'e-NCF' : 'NCF')." {$invoice->ncf}");
 
             $this->events->record('invoice_issued', $invoice, [
-                'number' => $invoice->number, 'ncf' => $invoice->ncf, 'ncf_type' => $invoice->ncf_type?->value, 'kind' => $invoice->kind->value,
+                'number' => $invoice->number, 'ncf' => $invoice->ncf, 'ncf_type' => $invoice->ncf_type?->value, 'fiscal_mode' => $invoice->fiscal_mode, 'kind' => $invoice->kind->value,
                 'client_id' => $invoice->client_id, 'client_tax_id' => $invoice->client_tax_id, 'salesperson_id' => $invoice->salesperson_id,
                 'issue_date' => $invoice->issue_date->toDateString(), 'due_date' => $invoice->due_date->toDateString(), 'payment_terms' => $invoice->payment_terms->value,
                 'subtotal' => $invoice->subtotal, 'discount_total' => $invoice->discount_total, 'taxable_total' => $invoice->taxable_total,

@@ -12,6 +12,7 @@ use App\Models\DebitNote;
 use App\Models\Invoice;
 use App\Models\User;
 use App\Services\Documents\DocumentPdf;
+use App\Services\Ecf\EcfPdfData;
 use App\Support\AuditHistory;
 use App\Support\TableQuery;
 use Illuminate\Database\Eloquent\Builder;
@@ -68,7 +69,7 @@ class DebitNoteController extends Controller
         $invoice = Invoice::query()->whereKey($request->integer('invoice_id'))->firstOrFail();
         $debitNote = $issueDebitNote->handle($request->validated(), $invoice, $this->actor($request));
 
-        return redirect()->route('sales.debit-notes.show', $debitNote)->with('success', "Nota de débito {$debitNote->number} emitida con NCF {$debitNote->ncf}");
+        return redirect()->route('sales.debit-notes.show', $debitNote)->with('success', "Nota de débito {$debitNote->number} emitida con ".($debitNote->fiscal_mode === 'ecf' ? 'e-NCF' : 'NCF')." {$debitNote->ncf}");
     }
 
     #[Middleware('permission:sales.debit-notes.view')]
@@ -79,6 +80,7 @@ class DebitNoteController extends Controller
 
         return Inertia::render('sales/debit-notes/show', [
             'debitNote' => [...$debitNote->toArray(), 'reason_label' => $debitNote->reason->label(), 'ncf_type_label' => $debitNote->ncf_type->label()],
+            'ecf' => $debitNote->fiscal_mode === 'ecf' ? $debitNote->ecfDocument?->summary() : null,
             'history' => AuditHistory::for($debitNote),
         ]);
     }
@@ -115,11 +117,12 @@ class DebitNoteController extends Controller
     /** @return array<string, mixed> */
     public function pdfData(DebitNote $debitNote): array
     {
-        $debitNote->load('lines', 'invoice', 'currency');
+        $debitNote->load('lines.product.unit', 'invoice', 'currency');
 
         return [
             'debitNote' => $debitNote,
-            'lines' => $debitNote->lines->map(fn ($line) => $line->toArray())->values()->all(),
+            'lines' => $debitNote->lines->map(fn ($line) => [...$line->toArray(), 'unit' => $line->product?->unit?->name])->values()->all(),
+            'ecf' => EcfPdfData::for($debitNote),
             'totals' => [
                 'subtotal' => $debitNote->subtotal,
                 'discount_total' => $debitNote->discount_total,

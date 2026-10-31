@@ -2,9 +2,11 @@
 
 use App\Actions\Sales\IssueInvoice;
 use App\Actions\Sales\SaveInvoice;
+use App\Enums\NcfType;
 use App\Enums\StockMovementType;
 use App\Models\Client;
 use App\Models\Currency;
+use App\Models\EcfCertificate;
 use App\Models\FinancialAccount;
 use App\Models\Invoice;
 use App\Models\NcfSequence;
@@ -13,10 +15,20 @@ use App\Models\Salesperson;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Models\Warehouse;
+use App\Services\Ecf\CertificateStore;
+use App\Services\Ecf\EcfXmlWriter;
+use App\Services\Ecf\XmlSigner;
 use App\Services\Inventory\InventoryService;
+use App\Services\Settings;
+use App\Support\Ecf\EcfDocumentData;
+use App\Support\Ecf\EcfItem;
+use App\Support\Ecf\EcfParty;
+use App\Support\Ecf\EcfTotals;
 use App\Support\FiscalId;
 use App\Support\Inventory\StockLine;
+use Carbon\CarbonImmutable;
 use Database\Seeders\PermissionSeeder;
+use Illuminate\Support\Facades\Http;
 use Spatie\Permission\Models\Role;
 
 /** Creates (or reuses) roles/permissions, creates a user with the given role and authenticates it. */
@@ -139,7 +151,13 @@ function validNcfSequencePayload(array $over = []): array
 
 function activeSequence(string $type = 'B01', array $over = []): NcfSequence
 {
-    return NcfSequence::factory()->create(array_merge(['ncf_type' => $type, 'range_from' => 1, 'range_to' => 100, 'next_number' => 1, 'expires_on' => in_array($type, ['B02', 'B04'], true) ? null : now()->addYear()->toDateString(), 'is_active' => true], $over));
+    $ncfType = NcfType::from($type);
+    $isElectronic = $ncfType->isElectronic();
+
+    return NcfSequence::factory()->create(array_merge([
+        'ncf_type' => $type, 'environment' => $isElectronic ? 'test' : 'prod', 'range_from' => 1, 'range_to' => $isElectronic ? 10000000 : 100, 'next_number' => 1,
+        'expires_on' => $ncfType->expires() ? now()->addYear()->toDateString() : null, 'is_active' => true,
+    ], $over));
 }
 
 /** A sales-role user linked to a salesperson (the shape every scoped-document test needs). */
@@ -229,4 +247,110 @@ function validReceiptPayload(Invoice $invoice, array $over = []): array
         'reference' => 'TRX-1', 'amount_received' => $invoice->balance, 'retention_itbis' => '0', 'retention_isr' => '0', 'notes' => '',
         'applications' => [['invoice_id' => $invoice->id, 'amount' => $invoice->balance]],
     ], $over);
+}
+
+/** Self-signed RSA-2048 certificate exported as PKCS#12 (binary), subject serialNumber = RNC as the DGII requires. */
+function fakeP12(string $password = 'secret', string $rnc = '131880738', int $days = 365): string
+{
+    $key = openssl_pkey_new(['private_key_bits' => 2048, 'private_key_type' => OPENSSL_KEYTYPE_RSA]);
+    $csr = openssl_csr_new(['countryName' => 'DO', 'organizationName' => 'Gomez International SRL', 'commonName' => 'Prueba Gomez', 'serialNumber' => $rnc], $key, ['digest_alg' => 'sha256']);
+    $cert = openssl_csr_sign($csr, null, $key, $days, ['digest_alg' => 'sha256']);
+    openssl_pkcs12_export($cert, $p12, $key, $password);
+
+    return $p12;
+}
+
+function activeCertificate(?User $actor = null): EcfCertificate
+{
+    return app(CertificateStore::class)->store(fakeP12(), 'secret', $actor ?? User::factory()->create(), 'Certificado de prueba');
+}
+
+function companyFiscalSettings(array $over = []): void
+{
+    $settings = app(Settings::class);
+    foreach (array_merge(['company.name' => 'Gomez International', 'company.legal_name' => 'Gomez International SRL', 'company.rnc' => '131880738', 'company.address' => 'Av. Winston Churchill 1099, Santo Domingo', 'company.email' => 'facturacion@gomez.test', 'ecf.company.municipio' => '010100', 'ecf.company.provincia' => '010000'], $over) as $key => $value) {
+        $settings->set($key, $value);
+    }
+}
+
+/** Writes, signs (with the active or a fresh fake certificate) and returns the signed DOMDocument for assertions and XSD validation. */
+function signedEcfXml(EcfDocumentData $data): DOMDocument
+{
+    $certificate = app(CertificateStore::class)->active() ?? activeCertificate();
+    $signed = app(XmlSigner::class)->sign(app(EcfXmlWriter::class)->write($data, CarbonImmutable::now()), $certificate);
+    $doc = new DOMDocument;
+    $doc->loadXML($signed->xml);
+
+    return $doc;
+}
+
+/**
+ * A signed supplier e-CF 31 addressed to the company (comprador_rnc, encf overridable), signed with a separate fake
+ * certificate that is never stored.
+ *
+ * @param  array{encf?: string, comprador_rnc?: string, signer_rnc?: string}  $over
+ */
+function supplierEcfXml(array $over = []): string
+{
+    openssl_pkcs12_read(fakeP12('x', $over['signer_rnc'] ?? '101010101'), $bundle, 'x');
+    $data = new EcfDocumentData(
+        type: NcfType::E31,
+        encf: $over['encf'] ?? 'E310000000777',
+        fechaEmision: CarbonImmutable::now(),
+        fechaVencimientoSecuencia: CarbonImmutable::parse('2027-12-31'),
+        tipoPago: 1,
+        fechaLimitePago: null,
+        terminoPago: null,
+        emisor: new EcfParty('101010101', 'Proveedor Prueba SRL', null, 'Calle 1'),
+        comprador: new EcfParty($over['comprador_rnc'] ?? '131880738', 'Gomez International SRL'),
+        items: [new EcfItem(numeroLinea: 1, indicadorFacturacion: 1, nombre: 'Servicio de prueba', descripcion: null, cantidad: '1.00', unidadMedida: 43, precioUnitario: '1000.0000', descuentoMonto: '0.00', impuestosAdicionales: [], montoItem: '1000.00', itbisAmount: '180.00')],
+        totals: new EcfTotals(montoGravadoTotal: '1000.00', montoGravadoI1: '1000.00', montoGravadoI2: null, montoGravadoI3: null, montoExento: null, totalItbis: '180.00', totalItbis1: '180.00', totalItbis2: null, totalItbis3: null, montoImpuestoAdicional: null, impuestosAdicionales: [], montoTotal: '1180.00'),
+        otraMoneda: null,
+        referencia: null,
+        indicadorNotaCredito: null,
+        numeroFacturaInterna: null,
+        codigoVendedor: null,
+    );
+
+    return app(XmlSigner::class)->signWithPem(app(EcfXmlWriter::class)->write($data, CarbonImmutable::now()), $bundle['cert'], $bundle['pkey'])->xml;
+}
+
+/**
+ * Points the e-CF provider, environment and fake outcome at the given values and creates an active sequence per
+ * traditional and electronic type when none exists yet. Keeps the fiscal mode unchanged (traditional NCF issuance).
+ */
+function ecfSettings(string $provider = 'fake', string $environment = 'test', string $outcome = 'accepted'): void
+{
+    $settings = app(Settings::class);
+    $settings->set('ecf.provider', $provider);
+    $settings->set('ecf.environment', $environment);
+    $settings->set('ecf.fake.outcome', $outcome);
+    companyFiscalSettings();
+
+    foreach (['B01', 'B02'] as $type) {
+        if (! NcfSequence::query()->where('ncf_type', $type)->where('is_active', true)->exists()) {
+            activeSequence($type, ['range_to' => 1000]);
+        }
+    }
+    foreach (['E31', 'E32', 'E33', 'E34', 'E44', 'E45'] as $type) {
+        if (! NcfSequence::query()->where('ncf_type', $type)->where('environment', $environment)->where('is_active', true)->exists()) {
+            activeSequence($type, ['environment' => $environment, 'range_to' => 10000000]);
+        }
+    }
+}
+
+/** ecfSettings() followed by the switch of the fiscal mode to 'ecf'. */
+function ecfMode(string $provider = 'fake', string $environment = 'test', string $outcome = 'accepted'): void
+{
+    ecfSettings($provider, $environment, $outcome);
+    app(Settings::class)->set('fiscal.mode', 'ecf');
+}
+
+/** The DGII seed and token endpoints of the test environment. */
+function fakeDgiiAuth(): array
+{
+    return [
+        'https://ecf.dgii.gov.do/testecf/autenticacion/api/autenticacion/semilla' => Http::response('<?xml version="1.0"?><SemillaModel><valor>abc-123</valor><fecha>2026-11-01T10:00:00</fecha></SemillaModel>', 200, ['Content-Type' => 'application/xml']),
+        'https://ecf.dgii.gov.do/testecf/autenticacion/api/autenticacion/validarsemilla' => Http::response(['token' => 'tok-1', 'expira' => '2026-11-01T11:00:00Z', 'expedido' => '2026-11-01T10:00:00Z']),
+    ];
 }
